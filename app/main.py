@@ -17,7 +17,7 @@ from .routers import (auth, clubs, expenses, frames, items, logs, master,
                       subscriptions, tables, team, tournaments)
 
 app = FastAPI(title="Rowdy's Den — Club Billing API",
-              version="3.22.1", docs_url="/docs")
+              version="3.22.2", docs_url="/docs")
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,7 +56,7 @@ async def unhandled_handler(_req: Request, exc: Exception):
 
 @app.get("/")
 async def root():
-    return {"name": "Rowdy's Den — Club Billing API", "version": "3.22.1",
+    return {"name": "Rowdy's Den — Club Billing API", "version": "3.22.2",
             "docs": "/docs", "health": "/api/health"}
 
 

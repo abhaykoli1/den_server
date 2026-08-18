@@ -28,6 +28,18 @@ def _load_dotenv(path: str = _ENV_PATH):
 _load_dotenv()
 
 
+def _int_env(name: str, default: int) -> int:
+    """Vercel/dashboard pe env var empty string paste ho jata hai — int('') import-
+    time crash karta tha (ValueError: invalid literal ''). Empty/invalid → default."""
+    v = (os.environ.get(name) or "").strip()
+    if not v:
+        return default
+    try:
+        return int(v)
+    except ValueError:
+        return default
+
+
 def _flag(name: str, default: bool = False) -> bool:
     v = os.environ.get(name)
     if v is None:
@@ -57,7 +69,7 @@ class Settings:
     # --- auth
     JWT_SECRET: str = os.environ.get("JWT_SECRET", "dev-secret-change-me-0123456789abcdef!!")
     JWT_ISSUER: str = os.environ.get("JWT_ISSUER", "rowdys-den")
-    JWT_EXPIRE_DAYS: int = int(os.environ.get("JWT_EXPIRE_DAYS", "14"))
+    JWT_EXPIRE_DAYS: int = _int_env("JWT_EXPIRE_DAYS", 14)
     GOOGLE_CLIENT_ID: str = os.environ.get("GOOGLE_CLIENT_ID", "")
     # Comma-separated EXTRA OAuth client IDs (e.g. Flutter app Android/iOS clients).
     # The web client above stays required for the React frontend; extras are additive.
@@ -87,12 +99,12 @@ class Settings:
     DATA_DIR: str = os.environ.get(
         "DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".devdata")
     )
-    MAX_LOGO_BYTES: int = int(os.environ.get("MAX_LOGO_BYTES", "1600000"))
-    TRIAL_DAYS: int = int(os.environ.get("TRIAL_DAYS", "14"))
+    MAX_LOGO_BYTES: int = _int_env("MAX_LOGO_BYTES", 1600000)
+    TRIAL_DAYS: int = _int_env("TRIAL_DAYS", 14)
 
     # --- mail (never crash; record-only when SMTP_HOST empty)
     SMTP_HOST: str = os.environ.get("SMTP_HOST", "")
-    SMTP_PORT: int = int(os.environ.get("SMTP_PORT", "587"))
+    SMTP_PORT: int = _int_env("SMTP_PORT", 587)
     SMTP_USER: str = os.environ.get("SMTP_USER", "")
     SMTP_PASSWORD: str = os.environ.get("SMTP_PASSWORD", "")
     MAIL_FROM: str = os.environ.get("MAIL_FROM", "Rowdy's Den <no-reply@localhost>")
