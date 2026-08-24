@@ -1,4 +1,5 @@
 """Auth, subscription plans, 402 walls, clubs & tenant isolation."""
+from app.services import subscription_is_active
 from conftest import (Api, add_member, add_table, check, dev_login, go,
                       make_seller_plan, master_api, owner_with_club)
 
@@ -54,16 +55,42 @@ def test_plan_catalog_and_select(api):
         r = await api.post("/account/subscription/select", {"planId": plan["id"]})
         check(r.status_code == 200, "select plan")
         sub = r.json()["subscription"]
+        user_id = r.json()["user"]["id"]
         check(sub["status"] == "trial" and sub["expiresAt"], "trial is instant w/ expiry")
         check((await api.get("/account/subscription")).json()["subscription"]["planName"]
               == "Pro", "subscription snapshot")
+        # Active/trial subscriptions with human-friendly expiry strings must still count as active.
+        check(subscription_is_active({
+            "status": " active ",
+            "expiresAt": "23/09/2026, 08:33 AM",
+        }) is True, "human-readable expiry and whitespace remain active")
+        check(subscription_is_active({
+            "status": " Trial ",
+            "expiresAt": "",
+        }) is True, "blank expiry still keeps trial active")
+        check(subscription_is_active({
+            "status": "pending",
+            "expiresAt": "",
+        }) is True, "pending status stays allowed")
+        check(subscription_is_active({
+            "status": "past_due",
+            "expiresAt": "2020-01-01T00:00:00Z",
+        }) is True, "past_due status remains allowed until terminal expired/cancelled")
         # 402 wall on billing mutations when subscription is expired
         r = await master.patch(
-            f"/master/users/{r.json()['user']['id']}/subscription",
+            f"/master/users/{user_id}/subscription",
             {"status": "expired"})
         check(r.status_code == 200, "master expires sub")
         r = await api.post("/clubs", {"name": "X Club"})
         check(r.status_code == 402, "expired -> still 402")
+
+        # An active plan with an expired end date is also blocked.
+        r = await master.patch(
+            f"/master/users/{user_id}/subscription",
+            {"status": "active", "expiresAt": "2020-01-01T00:00:00Z"})
+        check(r.status_code == 200, "master sets expired active plan")
+        r = await api.post("/clubs", {"name": "Late Club"})
+        check(r.status_code == 402, "expired active -> 402")
         await master.close()
     go(main())
 

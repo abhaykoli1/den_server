@@ -154,8 +154,9 @@ async def patch_user(user_id: str, payload: MasterUserPatchIn,
     target = await db.users.find_one({"id": user_id})
     if not target:
         raise HTTPException(404, "User not found")
-    if target.get("role") == "master" and payload.role:
-        raise HTTPException(400, "Master Admin role can't be changed here")
+
+    # Master can assign any role (owner / staff / master) as needed.
+    # The UI expects the role change to persist without backend rejection.
     ops = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not ops:
         raise HTTPException(400, "Nothing to update")
@@ -172,6 +173,7 @@ async def patch_subscription(user_id: str, payload: MasterSubPatchIn,
         raise HTTPException(404, "User not found")
     sub = dict(target.get("subscription") or {})
     before = sub.get("status")
+    plan = None
     if payload.planId:
         plan = await db.subscription_plans.find_one({"id": payload.planId})
         if not plan:
@@ -189,9 +191,10 @@ async def patch_subscription(user_id: str, payload: MasterSubPatchIn,
         now = now_utc()
         sub.setdefault("startsAt", iso(now))
         if payload.expiresAt is None and not sub.get("expiresAt"):
-            days = sub.get("durationDays") or (plan.get("trialDays") if payload.status == "trial"
-                                               and payload.planId else 30)
-            sub["expiresAt"] = iso(now + timedelta(days=int(days or 30)))
+            base_days = int(sub.get("durationDays") or (plan.get("durationDays", 30) if plan else 30))
+            if payload.status == "trial" and plan and plan.get("trialDays"):
+                base_days = int(plan.get("trialDays"))
+            sub["expiresAt"] = iso(now + timedelta(days=max(1, base_days)))
     sub["updatedAt"] = now_iso()
     target = await db.users.find_one_and_update({"id": user_id},
                                                 {"$set": {"subscription": sub,

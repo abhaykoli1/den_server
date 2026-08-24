@@ -27,7 +27,7 @@ def now_utc() -> datetime:
 def iso(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return dt.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def now_iso() -> str:
@@ -35,13 +35,39 @@ def now_iso() -> str:
 
 
 def parse_iso(s: str) -> datetime:
+    raw = str(s).strip()
+    if not raw:
+        raise ValueError("Bad date/time: empty")
     try:
-        d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        d = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return d
     except Exception:
-        raise ValueError(f"Bad date/time: {s}")
-    if d.tzinfo is None:
-        d = d.replace(tzinfo=timezone.utc)
-    return d
+        pass
+
+    for fmt in (
+        "%d/%m/%Y, %I:%M %p",
+        "%d/%m/%Y %I:%M %p",
+        "%d/%m/%Y, %H:%M",
+        "%d/%m/%Y %H:%M",
+        "%d/%m/%Y",
+        "%d-%m-%Y, %I:%M %p",
+        "%d-%m-%Y %I:%M %p",
+        "%d-%m-%Y, %H:%M",
+        "%d-%m-%Y %H:%M",
+        "%d-%m-%Y",
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+    ):
+        try:
+            d = datetime.strptime(raw, fmt)
+            if d.tzinfo is None:
+                d = d.replace(tzinfo=timezone.utc)
+            return d
+        except ValueError:
+            continue
+    raise ValueError(f"Bad date/time: {s}")
 
 
 def ist_date(iso_str: str) -> str:

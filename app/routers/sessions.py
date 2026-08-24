@@ -251,8 +251,36 @@ async def patch_session(club_id: str, session_id: str, payload: SessionPatchIn,
     club = await get_club(user, club_id)
     db = await db_mod.get_db()
     s = await _get_session(db, club["id"], session_id)
-    s = await db.sessions.find_one_and_update({"id": session_id},
-                                              {"$set": {"notes": payload.notes.strip()}})
+
+    updates = {}
+    # notes update (always safe)
+    if payload.notes is not None:
+        updates["notes"] = payload.notes.strip()
+
+    # players label updates (optional) — apply only if provided
+    if payload.players:
+        # validate pids exist in session and create a mapping pid -> new label
+        pid_to_label = {p.pid: p.label.strip() for p in payload.players}
+        session_players = s.get("players") or []
+        # ensure given pids are actually in the session
+        existing_pids = {p.get("pid") for p in session_players}
+        invalid = [pid for pid in pid_to_label.keys() if pid not in existing_pids]
+        if invalid:
+            raise HTTPException(400, f"Unknown player id(s): {', '.join(invalid)}")
+        # build new players list with updated labels
+        new_players = []
+        for p in session_players:
+            p2 = dict(p)
+            if p2.get("pid") in pid_to_label:
+                p2["label"] = pid_to_label[p2.get("pid")]
+            new_players.append(p2)
+        updates["players"] = new_players
+
+    if updates:
+        s = await db.sessions.find_one_and_update({"id": session_id}, {"$set": updates})
+    else:
+        s = s
+
     s["preview"] = _preview(s)
     s.pop("_id", None)
     return s
@@ -330,7 +358,7 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
 
     # --- resolve sides + member docs (pre-lock validation) ----------------
     winners, losers = resolve_sides(s["players"], s.get("matchMode", "solo"),
-                                    payload.winners, payload.winningTeam)
+                                    payload.winners, payload.winningTeam, payload.split)
     member_ids = {p.get("memberId") for p in s["players"] if p.get("memberId")}
     members_map = {}
     for mid in member_ids:

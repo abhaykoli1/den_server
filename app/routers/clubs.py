@@ -36,10 +36,10 @@ async def create_club(payload: ClubIn, user: dict = Depends(current_user)):
         limit_ok = True
     else:
         sub = user.get("subscription") or {}
-        status = sub.get("status")
         if user.get("role") == "staff":
             raise HTTPException(403, "Staff accounts can't create clubs")
-        if status not in ("trial", "active"):
+        from ..services import subscription_is_active
+        if not subscription_is_active(sub):
             raise HTTPException(402, "Subscription required — choose a plan first")
         owned = await db.clubs.count_documents({"ownerUserId": user["id"]})
         limit_ok = owned < int(sub.get("maxClubs") or 1)

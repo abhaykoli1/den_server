@@ -1,5 +1,6 @@
 """Staff lockdown (403 admin-area walls), team overview, master panel,
 platform support config, mail system."""
+from app.services import subscription_is_active
 from conftest import (Api, add_member, add_table, check, dev_login, go,
                       master_api, owner_with_club)
 
@@ -76,6 +77,39 @@ def test_team_overview(api):
         r = await master.get("/team")
         check(r.status_code == 200, "master team 200")
         await master.close(); await staff.close()
+    go(main())
+
+
+def test_master_role_assignment_and_active_subscription(api):
+    async def main():
+        master = await master_api()
+        user = Api()
+        owner_user = await dev_login(user, "promoted-owner@rowdys.dev", "Promoted Owner")
+
+        r = await master.patch(f"/master/users/{owner_user['id']}", {"role": "master"})
+        check(r.status_code == 200 and r.json()["role"] == "master",
+              "master role can be assigned")
+        check((await user.get("/master/overview")).status_code == 200,
+              "promoted master can access master area")
+
+        # Master can also demote a user back to owner/staff when needed.
+        r = await master.patch(f"/master/users/{owner_user['id']}", {"role": "owner"})
+        check(r.status_code == 200 and r.json()["role"] == "owner",
+              "master role can be demoted back to owner")
+
+        r = await master.patch(f"/master/users/{owner_user['id']}", {"role": "staff"})
+        check(r.status_code == 200 and r.json()["role"] == "staff",
+              "master role can be changed to staff")
+
+        check(subscription_is_active({
+            "status": "active",
+            "expiresAt": "2099-12-31T23:59:59Z",
+        }) is True, "active sub remains valid when expiry is in future")
+        r = await master.patch(f"/master/users/{owner_user['id']}/subscription",
+                               {"status": "active", "notes": "paid via UPI"})
+        check(r.status_code == 200 and r.json()["subscription"]["status"] == "active",
+              "active subscription patch persists")
+        await master.close(); await user.close()
     go(main())
 
 

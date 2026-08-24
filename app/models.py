@@ -208,6 +208,7 @@ class SessionStartIn(In):
 class SessionConfirmIn(In):
     winners: list[str] = Field(default_factory=list)     # player pids (solo)
     winningTeam: Optional[Literal["A", "B"]] = None      # 2v2
+    split: bool = False
     discount: float = Field(default=0, ge=0, le=1000000)
     cashPaid: float = Field(default=0, ge=0, le=1000000)
     mode: Literal["cash", "upi", "card"] = "cash"
@@ -259,8 +260,14 @@ class SessionAdvanceIn(In):
     mode: Literal["cash", "upi", "card"] = "cash"
 
 
+class PlayerLabelIn(In):
+    pid: str = Field(min_length=1)
+    label: str = Field(min_length=1, max_length=80)
+
+
 class SessionPatchIn(In):
     notes: str = Field(default="", max_length=300)
+    players: Optional[list[PlayerLabelIn]] = None
 
 
 class SessionMoveIn(In):
@@ -303,6 +310,7 @@ class MenuItemPatchIn(In):
     category: Optional[str] = Field(default=None, max_length=60)
     price: Optional[float] = Field(default=None, gt=0, le=100000)
     costPrice: Optional[float] = Field(default=None, ge=0, le=100000)
+    stockQty: Optional[int] = Field(default=None, ge=0, le=1000000)
     unit: Optional[str] = Field(default=None, max_length=20)
     active: Optional[bool] = None
     reorderLevel: Optional[int] = Field(default=None, ge=0, le=100000)
@@ -449,7 +457,7 @@ class MasterPlanPatchIn(In):
 
 
 class MasterUserPatchIn(In):
-    role: Optional[Literal["owner", "staff"]] = None
+    role: Optional[Literal["owner", "staff", "master"]] = None
     clubIds: Optional[list[str]] = None
     active: Optional[bool] = None
     phone: Optional[str] = Field(default=None, max_length=20)

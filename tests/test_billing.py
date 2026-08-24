@@ -42,6 +42,27 @@ async def _get_member(mid):
     return await db.members.find_one({"id": mid})
 
 
+def test_split_mode_all_players_share_bill(api):
+    async def main():
+        master = await master_api()
+        cid, t1, t2, ravi, imran = await _scene(api, master)
+        r = await api.post(f"/clubs/{cid}/sessions", {
+            "tableId": t1["id"], "matchMode": "solo",
+            "players": [{"label": "Ravi", "type": "member", "memberId": ravi["id"]},
+                        {"label": "Imran", "type": "member", "memberId": imran["id"]}]})
+        s = r.json()
+        await _backdate(s["id"], 35)
+        await api.post(f"/clubs/{cid}/sessions/{s['id']}/stop")
+        r = await api.post(f"/clubs/{cid}/sessions/{s['id']}/confirm",
+                           {"split": True, "paymentMode": "due"})
+        check(r.status_code == 200, r.text)
+        frame = r.json()["frame"]
+        check(len(frame["settlements"]) == 2, "split leaves both players in settlement")
+        check(abs(frame["frameAmount"] - 20) < APPROX, "frame still computes from elapsed time")
+        await master.close()
+    go(main())
+
+
 def test_min_charge_and_winner_never_pays(api):
     async def main():
         master = await master_api()

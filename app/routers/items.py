@@ -129,8 +129,7 @@ async def create_bill(club_id: str, payload: ItemBillIn, user: dict = Depends(cu
         if not member:
             raise HTTPException(404, "Member not found")
     customer = (payload.customerName or "").strip() or (member["name"] if member else "")
-    if not customer:
-        raise HTTPException(400, "Customer name is required — or pick a member")
+    customer = customer or "Guest"
 
     # --- atomic stock decrement per line (oversell -> 400 readable) --------
     lines, decremented = [], []

@@ -73,7 +73,7 @@ def pass_block_reason(member: dict):
     return None
 
 
-def resolve_sides(players: list, match_mode: str, winners: list, winning_team):
+def resolve_sides(players: list, match_mode: str, winners: list, winning_team, split: bool = False):
     """Return (winners, losers) player dicts; 400 readable on any problem."""
     if match_mode == "2v2":
         if winning_team not in ("A", "B"):
@@ -86,10 +86,14 @@ def resolve_sides(players: list, match_mode: str, winners: list, winning_team):
     wset = set(winners or [])
     winners_p = [p for p in players if p["pid"] in wset]
     if not winners_p:
-        raise HTTPException(400, "Pick the winner before confirming the bill")
+        if split:
+            return [], list(players)
+        return [], list(players)
+    if len(winners_p) == len(players):
+        raise HTTPException(400, "At least one player must lose — winner selection is invalid")
     losers_p = [p for p in players if p["pid"] not in wset]
     if not losers_p:
-        raise HTTPException(400, "Someone has to pay — the winner can't be everyone")
+        raise HTTPException(400, "At least one player must lose — winner selection is invalid")
     return winners_p, losers_p
 
 

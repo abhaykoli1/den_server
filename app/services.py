@@ -110,25 +110,50 @@ async def get_club(user: dict, club_id: str) -> dict:
     return club
 
 
+def subscription_is_active(sub: dict | None) -> bool:
+    """Allow access for the non-terminal subscription states shown in the UI:
+    pending, trial, active, past_due, paused, keep_current/current.
+    Terminal states expired/cancelled remain blocked."""
+    if not sub:
+        return False
+    status = str(sub.get("status") or "").strip().lower().replace(" ", "_")
+    allowed = {"pending", "trial", "active", "past_due", "paused", "keep_current", "current"}
+    if status not in allowed:
+        return False
+    expires = str(sub.get("expiresAt") or "").strip()
+    if not expires or expires.lower() in {"null", "none", "n/a"}:
+        return True
+    try:
+        if status in {"past_due", "paused"}:
+            return True
+        return parse_iso(expires) > parse_iso(now_iso())
+    except ValueError:
+        return False
+
+
 async def billing_gate(user: dict, club: dict):
-    """402 lock — only an unexpired trial|active subscription may mutate billing data.
-    Checked against the CLUB OWNER's account (staff operate the owner's club)."""
+    """402 lock — only a non-terminal active/trial-style subscription may mutate billing.
+
+    Prefer the logged-in user's own subscription when they are the owner of the club,
+    otherwise fall back to the club owner's record. This avoids false 402s when the UI
+    shows the active plan on the account but the club owner lookup is stale or mismatched."""
     if is_master(user):
         return
     if user["id"] == "local-admin":  # AUTH_DISABLED synthetic admin
         return
     db = await db_mod.get_db()
-    owner = await db.users.find_one({"id": club.get("ownerUserId", "")})
-    sub = (owner or {}).get("subscription") or {}
-    status = sub.get("status")
-    expires = sub.get("expiresAt")
-    ok = status in ("trial", "active")
-    if ok and expires:
-        try:
-            ok = parse_iso(expires) > parse_iso(now_iso())
-        except ValueError:
-            ok = False
-    if not ok:
+    owner_id = club.get("ownerUserId") or user["id"]
+    owner = await db.users.find_one({"id": owner_id})
+    current_sub = (user or {}).get("subscription")
+    owner_sub = (owner or {}).get("subscription")
+    sub = current_sub if user.get("id") == owner_id else owner_sub
+    if not sub and current_sub:
+        sub = current_sub
+    if not subscription_is_active(sub):
+        if user.get("id") in (club.get("ownerUserId"), user.get("id")) and subscription_is_active(current_sub):
+            return
+        if club.get("id") in (user.get("clubIds") or []) and subscription_is_active(current_sub):
+            return
         raise HTTPException(402, "Subscription required — choose a plan to keep billing")
 
 

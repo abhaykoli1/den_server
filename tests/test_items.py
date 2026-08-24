@@ -32,6 +32,8 @@ def test_menu_items_crud_and_restock(api):
               "auto expense title")
         r = await api.patch(f"/clubs/{cid}/menu-items/{item['id']}", {"price": 45})
         check(r.json()["price"] == 45, "price patch")
+        r = await api.patch(f"/clubs/{cid}/menu-items/{item['id']}", {"stockQty": 18})
+        check(r.json()["stockQty"] == 18, "stock qty patch")
         r = await api.delete(f"/clubs/{cid}/menu-items/{item['id']}")
         check(r.status_code == 200, "delete item")
         r = await api.get(f"/clubs/{cid}/menu-items")
@@ -71,11 +73,11 @@ def test_item_bill_modes_and_lifecycle(api):
                      if i["id"] == item["id"])
         check(stock["stockQty"] == 8, "oversell didn't touch stock")
 
-        # no member + no name -> 400
+        # no member + no name -> defaults to a guest bill instead of blocking
         r = await api.post(f"/clubs/{cid}/item-bills", {
             "items": [{"menuItemId": item["id"], "qty": 1}], "mode": "cash"})
-        check(r.status_code == 400 and "Customer name" in r.json()["detail"],
-              "name required without member")
+        check(r.status_code == 201 and r.json()["bill"]["customerName"] == "Guest",
+              "blank walk-in falls back to Guest")
 
         # due-mode bill lands on the member's due
         r = await api.post(f"/clubs/{cid}/item-bills", {
