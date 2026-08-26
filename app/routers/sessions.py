@@ -8,8 +8,8 @@ from ..auth import current_user
 from ..billing import (calc_web_aliases, compute_bill, resolve_hourly,
                        resolve_sides, table_amount)
 from ..models import (GloveReturnIn, SessionAdvanceIn, SessionConfirmIn,
-                      SessionItemsIn, SessionMoveIn, SessionPatchIn,
-                      SessionStartIn)
+                      SessionItemsIn, SessionItemsReplaceIn, SessionMoveIn, SessionPatchIn,
+                      SessionPlayerIn, SessionStartIn)
 from ..services import (alias_player_ids, billing_gate, get_club, payment_log,
                         wants_web, write_log)
 from ..util import (ceil_minutes, fmt, money, now_iso, split_evenly, uid)
@@ -142,6 +142,59 @@ async def _get_session(db, club_id: str, session_id: str) -> dict:
     return alias_player_ids(s)
 
 
+@router.post("/{session_id}/players")
+async def add_player(club_id: str, session_id: str, payload: SessionPlayerIn,
+                     user: dict = Depends(current_user)):
+    club = await get_club(user, club_id)
+    await billing_gate(user, club)
+    db = await db_mod.get_db()
+    s = await _get_session(db, club["id"], session_id)
+    if s.get("endedAt"):
+        raise HTTPException(400, "Player can only be added while the timer is running")
+    players = list(s.get("players") or [])
+    if len(players) >= 8:
+        raise HTTPException(400, "A session can have at most 8 players")
+    label = payload.label.strip()
+    player = {
+        "pid": uid("p"), "id": "", "seat": len(players),
+        "label": label, "type": payload.type, "isWinner": False,
+    }
+    player["id"] = player["pid"]
+    if payload.team:
+        player["team"] = payload.team
+    if payload.type == "member":
+        if not payload.memberId:
+            raise HTTPException(400, "Pick a member or add a guest name")
+        member = await db.members.find_one({"id": payload.memberId, "clubId": club["id"]})
+        if not member:
+            raise HTTPException(404, "Member not found")
+        if any(p.get("memberId") == member["id"] for p in players):
+            raise HTTPException(400, "That member is already in this session")
+        player["memberId"] = member["id"]
+        player["label"] = member["name"]
+    elif not label:
+        raise HTTPException(400, "Guest name is required")
+    players.append(player)
+    table = await db.tables.find_one({"id": s["tableId"], "clubId": club["id"]})
+    if not table:
+        raise HTTPException(404, "Table not found")
+    hourly, peak = resolve_hourly(table["rate"], len(players))
+    updated = await db.sessions.find_one_and_update(
+        {"id": session_id, "clubId": club["id"], "endedAt": None},
+        {"$set": {"players": players, "playerCount": len(players),
+                   "hourlyRate": hourly, "peak": peak}},
+    )
+    if not updated:
+        raise HTTPException(400, "Session is no longer running")
+    updated = alias_player_ids(updated)
+    updated["preview"] = _preview(updated)
+    updated.pop("_id", None)
+    await write_log(club["id"], "BILLING",
+                    f"Player added · {table['name']} · {player['label']}",
+                    actor=user.get("name", ""))
+    return updated
+
+
 @router.post("/{session_id}/stop")
 async def stop_session(club_id: str, session_id: str, user: dict = Depends(current_user)):
     club = await get_club(user, club_id)
@@ -224,6 +277,62 @@ async def add_item(club_id: str, session_id: str, payload: SessionItemsIn,
     return s
 
 
+@router.put("/{session_id}/items")
+async def replace_items(club_id: str, session_id: str,
+                        payload: SessionItemsReplaceIn,
+                        user: dict = Depends(current_user)):
+    """Replace attached quantities while running; zero quantity removes an item."""
+    club = await get_club(user, club_id)
+    await billing_gate(user, club)
+    db = await db_mod.get_db()
+    s = await _get_session(db, club["id"], session_id)
+    if s.get("endedAt"):
+        raise HTTPException(400, "Items can only be edited while the timer is running")
+
+    requested = {}
+    for line in payload.items:
+        mid = line.get("menuItemId") or line.get("itemId")
+        requested[mid] = line.get("qty", 0)
+    current = {
+        (line.get("menuItemId") or line.get("itemId")): int(line.get("qty", 0))
+        for line in s.get("items") or []
+    }
+    menu = {}
+    for mid in set(current) | set(requested):
+        item = await db.menu_items.find_one({"id": mid, "clubId": club["id"]})
+        if not item or not item.get("active", True):
+            raise HTTPException(404, "Item not found (or inactive)")
+        menu[mid] = item
+    for mid, qty in requested.items():
+        delta = qty - current.get(mid, 0)
+        if delta > 0 and menu[mid].get("stockQty", 0) < delta:
+            raise HTTPException(400, f"Only {menu[mid].get('stockQty', 0)} {menu[mid]['name']} left in stock")
+
+    for mid in set(current) | set(requested):
+        delta = requested.get(mid, 0) - current.get(mid, 0)
+        if delta:
+            await db.menu_items.update_one({"id": mid, "clubId": club["id"]},
+                                           {"$inc": {"stockQty": -delta}})
+
+    items = []
+    for mid, qty in requested.items():
+        if qty <= 0:
+            continue
+        item = menu[mid]
+        price = float(item.get("price", 0))
+        cost = float(item.get("costPrice") or 0)
+        items.append({"menuItemId": mid, "itemId": mid, "name": item["name"],
+                      "price": price, "qty": qty, "amount": money(price * qty),
+                      "costPrice": cost, "costAmount": money(cost * qty)})
+    total = money(sum(line["amount"] for line in items))
+    s = await db.sessions.find_one_and_update(
+        {"id": session_id, "clubId": club["id"]},
+        {"$set": {"items": items, "itemsTotal": total}})
+    s["preview"] = _preview(s)
+    s.pop("_id", None)
+    return s
+
+
 @router.post("/{session_id}/advance")
 async def add_advance(club_id: str, session_id: str, payload: SessionAdvanceIn,
                       user: dict = Depends(current_user)):
@@ -260,19 +369,33 @@ async def patch_session(club_id: str, session_id: str, payload: SessionPatchIn,
     # players label updates (optional) — apply only if provided
     if payload.players:
         # validate pids exist in session and create a mapping pid -> new label
-        pid_to_label = {p.pid: p.label.strip() for p in payload.players}
+        player_updates = {
+            p.pid: (p.label.strip(), p.type, p.memberId)
+            for p in payload.players
+        }
         session_players = s.get("players") or []
         # ensure given pids are actually in the session
         existing_pids = {p.get("pid") for p in session_players}
-        invalid = [pid for pid in pid_to_label.keys() if pid not in existing_pids]
+        invalid = [pid for pid in player_updates.keys() if pid not in existing_pids]
         if invalid:
             raise HTTPException(400, f"Unknown player id(s): {', '.join(invalid)}")
         # build new players list with updated labels
         new_players = []
         for p in session_players:
             p2 = dict(p)
-            if p2.get("pid") in pid_to_label:
-                p2["label"] = pid_to_label[p2.get("pid")]
+            if p2.get("pid") in player_updates:
+                label, player_type, member_id = player_updates[p2["pid"]]
+                p2["label"] = label
+                p2["type"] = player_type
+                if player_type == "member":
+                    member = await db.members.find_one(
+                        {"id": member_id, "clubId": club["id"]}
+                    )
+                    if not member:
+                        raise HTTPException(404, "Member not found")
+                    p2["memberId"] = member["id"]
+                else:
+                    p2.pop("memberId", None)
             new_players.append(p2)
         updates["players"] = new_players
 

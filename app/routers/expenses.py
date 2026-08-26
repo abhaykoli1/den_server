@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import db as db_mod
 from ..auth import current_user
-from ..models import ExpenseIn
+from ..models import ExpenseIn, ExpensePatchIn
 from ..services import deny_staff_admin, get_club, wants_web, write_log
 from ..util import fmt, month_of, now_iso, today_ist, uid
 
@@ -67,3 +67,30 @@ async def delete_expense(club_id: str, expense_id: str, user: dict = Depends(cur
     await write_log(club["id"], "ADMIN",
                     f"Expense deleted · {expense['title']}", actor=user.get("name", ""))
     return {"ok": True, "message": f"Expense deleted · {expense['title']}"}
+
+
+@router.patch("/{expense_id}")
+async def patch_expense(club_id: str, expense_id: str, payload: ExpensePatchIn,
+                        user: dict = Depends(current_user)):
+    deny_staff_admin(user)
+    club = await get_club(user, club_id)
+    db = await db_mod.get_db()
+    ops = {k: v for k, v in payload.model_dump(exclude_unset=True).items()}
+    if "title" in ops:
+        ops["title"] = ops["title"].strip()
+    if "note" in ops:
+        ops["note"] = (ops["note"] or "").strip()
+    if "amount" in ops:
+        ops["amount"] = money(ops["amount"])
+    if not ops:
+        raise HTTPException(400, "Nothing to update")
+    expense = await db.expenses.find_one_and_update(
+        {"id": expense_id, "clubId": club["id"]}, {"$set": ops})
+    if not expense:
+        raise HTTPException(404, "Expense not found")
+    expense.pop("_id", None)
+    await write_log(
+        club["id"], "ADMIN",
+        f"Expense edited · {expense.get('title', expense_id)}",
+        actor=user.get("name", ""))
+    return expense

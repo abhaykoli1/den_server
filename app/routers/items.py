@@ -38,6 +38,22 @@ async def create_item(club_id: str, payload: MenuItemIn, user: dict = Depends(cu
     }
     await db.menu_items.insert_one(item)
     item.pop("_id", None)
+    expense_amount = money(payload.stockQty * payload.costPrice)
+    if expense_amount > 0:
+        expense = {
+            "id": uid("e"), "clubId": club["id"],
+            "title": f"Stock purchase · {item['name']} ×{payload.stockQty}",
+            "category": "stock", "amount": expense_amount, "date": today_ist(),
+            "note": f"Auto from initial item stock @ ₹{fmt(payload.costPrice)}/{item['unit']}",
+            "createdAt": now_iso(), "auto": True,
+            "refType": "menu_item", "refId": item["id"],
+        }
+        await db.expenses.insert_one(expense)
+        await write_log(
+            club["id"], "BILLING",
+            f"Added {item['name']} · initial stock expense ₹{fmt(expense_amount)}",
+            actor=user.get("name", ""),
+        )
     return item
 
 

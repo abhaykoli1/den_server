@@ -19,7 +19,7 @@ async def _master_starter_club(db, user: dict):
         return
     if await db.clubs.count_documents({"ownerUserId": user["id"]}):
         return
-    club = {"id": uid("club"), "name": "Rowdy's Den", "logo": "",
+    club = {"id": uid("club"), "name": "Rowdy's Den", "logo": "", "qrCode": "",
             "ownerUserId": user["id"], "settings": dict(DEFAULT_SETTINGS),
             "createdAt": now_iso()}
     await db.clubs.insert_one(club)

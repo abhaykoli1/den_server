@@ -47,7 +47,7 @@ async def create_club(payload: ClubIn, user: dict = Depends(current_user)):
             raise HTTPException(
                 400, f"Your plan allows only {sub.get('maxClubs')} club(s) — upgrade to add more")
     club = {
-        "id": uid("club"), "name": payload.name.strip(), "logo": "",
+        "id": uid("club"), "name": payload.name.strip(), "logo": "", "qrCode": "",
         "ownerUserId": user["id"], "settings": dict(DEFAULT_SETTINGS),
         "createdAt": now_iso(),
     }
@@ -77,6 +77,10 @@ async def patch_club(club_id: str, payload: ClubPatchIn, user: dict = Depends(cu
         if len(payload.logo) > settings.MAX_LOGO_BYTES + 100000:
             raise HTTPException(400, "Logo is too large — keep it under ~1.5 MB")
         ops["logo"] = payload.logo
+    if payload.qrCode is not None:
+        if len(payload.qrCode) > settings.MAX_LOGO_BYTES + 100000:
+            raise HTTPException(400, "QR code image is too large — keep it under ~1.5 MB")
+        ops["qrCode"] = payload.qrCode
     if not ops:
         raise HTTPException(400, "Nothing to update")
     await db.clubs.update_one({"id": club_id}, {"$set": ops})

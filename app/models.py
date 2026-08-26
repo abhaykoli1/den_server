@@ -36,6 +36,7 @@ class ClubIn(In):
 class ClubPatchIn(In):
     name: Optional[str] = Field(default=None, min_length=2, max_length=80)
     logo: Optional[str] = None  # data-url, size-checked server side
+    qrCode: Optional[str] = None  # payment QR data-url, size-checked server side
 
 
 class ClubSettingsIn(In):
@@ -255,6 +256,21 @@ class SessionItemsIn(In):
         return out
 
 
+class SessionItemsReplaceIn(In):
+    """Complete running-session item quantities; zero removes a line."""
+    items: list[dict] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def _validate_lines(self) -> "SessionItemsReplaceIn":
+        for line in self.items:
+            if not line.get("menuItemId") and not line.get("itemId"):
+                raise ValueError("menuItemId is required for each bill item")
+            qty = line.get("qty", 0)
+            if not isinstance(qty, int) or qty < 0 or qty > 500:
+                raise ValueError("item quantity must be between 0 and 500")
+        return self
+
+
 class SessionAdvanceIn(In):
     amount: float = Field(gt=0, le=100000)
     mode: Literal["cash", "upi", "card"] = "cash"
@@ -263,6 +279,8 @@ class SessionAdvanceIn(In):
 class PlayerLabelIn(In):
     pid: str = Field(min_length=1)
     label: str = Field(min_length=1, max_length=80)
+    type: Literal["member", "guest"] = "guest"
+    memberId: Optional[str] = None
 
 
 class SessionPatchIn(In):
@@ -367,6 +385,15 @@ class ExpenseIn(In):
     amount: float = Field(gt=0, le=10000000)
     date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")  # None → today
     note: Optional[str] = Field(default=None, max_length=300)  # web sends null sometimes
+
+
+class ExpensePatchIn(In):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    category: Optional[Literal["rent", "salary", "electricity", "maintenance", "stock",
+                               "tournament", "misc"]] = None
+    amount: Optional[float] = Field(default=None, gt=0, le=10000000)
+    date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    note: Optional[str] = Field(default=None, max_length=300)
 
 
 # --------------------------------------------------------------- tournaments
