@@ -27,9 +27,10 @@ async def create_member(club_id: str, payload: MemberIn, user: dict = Depends(cu
     club = await get_club(user, club_id)
     await billing_gate(user, club)
     db = await db_mod.get_db()
+    email = (payload.email or "").strip().lower()
     member = {
         "id": uid("m"), "clubId": club["id"], "name": payload.name.strip(),
-        "phone": (payload.phone or "").strip(), "email": (payload.email or "").strip(),
+        "phone": (payload.phone or "").strip(), "email": email,
         "type": "regular",
         "walletBalance": money(payload.walletBalance),  # opening credit (migrated)
         "dueAmount": money(payload.dueAmount),          # opening due (migrated)
@@ -73,6 +74,8 @@ async def patch_member(club_id: str, member_id: str, payload: MemberPatchIn,
     for key in ("name", "phone", "email", "notes", "active"):
         val = getattr(payload, key)
         if val is not None:
+            if key == "email" and isinstance(val, str):
+                val = val.strip().lower()
             ops[key] = val.strip() if isinstance(val, str) else val
     for key in ("walletBalance", "dueAmount", "passFramesLeft"):  # direct-set (web)
         val = getattr(payload, key)

@@ -31,6 +31,7 @@ async def create_item(club_id: str, payload: MenuItemIn, user: dict = Depends(cu
     db = await db_mod.get_db()
     item = {
         "id": uid("it"), "clubId": club["id"], "name": payload.name.strip(),
+        "image": payload.image or "",
         "category": payload.category.strip() or "Cafe", "price": money(payload.price),
         "costPrice": money(payload.costPrice), "stockQty": payload.stockQty,
         "unit": payload.unit.strip() or "pc", "reorderLevel": payload.reorderLevel,
@@ -63,6 +64,8 @@ async def patch_item(club_id: str, item_id: str, payload: MenuItemPatchIn,
     club = await get_club(user, club_id)
     db = await db_mod.get_db()
     ops = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if "image" in ops and ops["image"] is None:
+        ops["image"] = ""
     for key in ("price", "costPrice"):
         if key in ops:
             ops[key] = money(ops[key])

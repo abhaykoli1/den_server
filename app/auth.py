@@ -1,4 +1,5 @@
 """JWT auth (HS256 + issuer), Google sign-in verification, role/tenant guards."""
+import re
 from datetime import timedelta
 
 import jwt
@@ -79,6 +80,59 @@ async def upsert_user(db, email: str, name: str = "", picture: str = "", google_
     return user
 
 
+async def resolve_member_by_email(db, email: str) -> dict | None:
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        return None
+    match = await db.members.find_one({"email": normalized, "active": {"$ne": False}})
+    if match:
+        return match
+    matches = await db.members.find({"email": {"$regex": f"^{re.escape(normalized)}$", "$options": "i"}}).to_list(None)
+    for member in matches:
+        if member.get("active", True):
+            return member
+    return None
+
+
+async def resolve_members_by_email(db, email: str) -> list[dict]:
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        return []
+    matches = await db.members.find({
+        "email": {"$regex": f"^{re.escape(normalized)}$", "$options": "i"},
+        "active": {"$ne": False},
+    }).to_list(None)
+    return [member for member in matches if member.get("active", True)]
+
+
+async def member_profile_for_user(db, user: dict) -> dict | None:
+    member_id = user.get("memberId") or user.get("id")
+    if not member_id:
+        return None
+    if user.get("role") != "member" and not str(member_id).startswith("m_"):
+        return None
+    member = await db.members.find_one({"id": member_id})
+    if not member:
+        return None
+    member = dict(member)
+    member["role"] = "member"
+    member["memberId"] = member["id"]
+    club_id = member.get("clubId") or (member.get("clubIds") or [None])[0]
+    member["clubId"] = club_id
+    member["clubIds"] = list(dict.fromkeys(
+        (user.get("clubIds") or []) + ([club_id] if club_id else [])
+    ))
+    member["memberships"] = user.get("memberships") or [dict(member)]
+    member["clubs"] = user.get("clubs") or []
+    for item in member["memberships"] + member["clubs"]:
+        item.pop("_id", None)
+    if club_id:
+        club = await db.clubs.find_one({"id": club_id})
+        if club:
+            member["club"] = dict(club)
+    return member
+
+
 _LOCAL_ADMIN = {
     "id": "local-admin", "email": "admin@localhost", "name": "Local Admin",
     "picture": "", "role": "owner", "active": True, "clubIds": [],
@@ -105,7 +159,8 @@ async def current_user(authorization: str = Header(default=None)):
         raise HTTPException(401, "Authentication required")
     if not user.get("active", True):
         raise HTTPException(403, "Account disabled — contact the Master Admin")
-    return user
+    member_profile = await member_profile_for_user(db, user)
+    return member_profile or user
 
 
 def is_master(user: dict) -> bool:

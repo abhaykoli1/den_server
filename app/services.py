@@ -287,6 +287,14 @@ async def club_stats(club: dict) -> dict:
         l.get("amount", 0) for l in logs
         if ist_date(l["createdAt"]) == today and l.get("mode") != "wallet"
     )
+    today_cash = sum(
+        l.get("amount", 0) for l in logs
+        if ist_date(l["createdAt"]) == today and l.get("mode") == "cash"
+    )
+    today_upi = sum(
+        l.get("amount", 0) for l in logs
+        if ist_date(l["createdAt"]) == today and l.get("mode") == "upi"
+    )
     members = await db.members.find({"clubId": club_id}).to_list(None)
     total_due = sum(m.get("dueAmount", 0) for m in members)
     active_members = sum(1 for m in members if m.get("active") is not False)
@@ -301,6 +309,8 @@ async def club_stats(club: dict) -> dict:
         "clubId": club_id,
         "today": today,
         "todayEarnings": money(today_earnings),
+        "todayCash": money(today_cash),
+        "todayUpi": money(today_upi),
         "totalDue": money(total_due),
         "runningSessions": running,
         "activeSessions": running,  # web alias

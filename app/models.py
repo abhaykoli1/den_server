@@ -315,6 +315,7 @@ class WinnersPatchIn(In):
 # ---------------------------------------------------------------------- items
 class MenuItemIn(In):
     name: str = Field(min_length=1, max_length=80)
+    image: Optional[str] = Field(default="", max_length=2500000)
     category: str = Field(default="Cafe", max_length=60)
     price: float = Field(gt=0, le=100000)
     costPrice: float = Field(default=0, ge=0, le=100000)
@@ -325,6 +326,7 @@ class MenuItemIn(In):
 
 class MenuItemPatchIn(In):
     name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    image: Optional[str] = Field(default=None, max_length=2500000)
     category: Optional[str] = Field(default=None, max_length=60)
     price: Optional[float] = Field(default=None, gt=0, le=100000)
     costPrice: Optional[float] = Field(default=None, ge=0, le=100000)
@@ -489,6 +491,12 @@ class MasterUserPatchIn(In):
     active: Optional[bool] = None
     phone: Optional[str] = Field(default=None, max_length=20)
     location: Optional[str] = Field(default=None, max_length=120)
+
+
+class TeamStaffIn(In):
+    email: str = Field(min_length=3, max_length=120)
+    name: str = Field(min_length=1, max_length=80)
+    clubId: Optional[str] = None
 
 
 class MasterSubPatchIn(In):

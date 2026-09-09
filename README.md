@@ -104,3 +104,10 @@ Response dono ka: `{ user, token }` → `Authorization: Bearer <token>` har requ
 - Real data chahiye to backend `.env` me `MONGODB_URI`/`MONGODB_DB` (Atlas) set karo —
   blank chhodo to in-memory mongomock + JSON snapshot se bina setup ke chal jata hai.
 - Flutter app ko bhi yahi backend milega: `--dart-define=API_URL=http://10.0.2.2:8000/api` (emulator).
+
+
+
+<!-- listen now i have den_server the backend and den_app in fluuter this is the billing app of rowdys den now i want to build a members app of rowdys den       
+  where memers wants to see wheather the table/game is free or live  he also see his profile , wallet balance, membership, dues, advance  and he can pay from 
+  app too and he can order food items from the app that is more secure and he has a activity transactions log and frames log that hi play at what time and    
+  how mujhe did he pay and all make this app in flutter use backend already in my folder make another folder named member_app and start building the app   -->
