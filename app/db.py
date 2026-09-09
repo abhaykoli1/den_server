@@ -21,6 +21,7 @@ COLLECTIONS = [
     "users", "subscription_plans", "clubs", "tables", "members", "plans",
     "sessions", "frames", "menu_items", "item_bills", "membership_sales",
     "expenses", "tournaments", "mailouts", "platform_config", "logs",
+    "bookings",
 ]
 
 _db = None

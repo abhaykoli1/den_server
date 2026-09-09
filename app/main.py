@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .db import dump_snapshot, get_db
-from .routers import (auth, clubs, expenses, frames, items, logs, master,
+from .routers import (auth, bookings, clubs, expenses, frames, items, logs, master,
                       member_portal, members, plans, platform, reports, sessions,
                       subscriptions, tables, team, tournaments)
 
@@ -69,6 +69,7 @@ async def health():
 API_PREFIX = "/api"
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(member_portal.router, prefix=API_PREFIX)
+app.include_router(bookings.router, prefix=API_PREFIX)
 app.include_router(subscriptions.router, prefix=API_PREFIX)
 app.include_router(clubs.router, prefix=API_PREFIX)
 app.include_router(tables.router, prefix=API_PREFIX)
