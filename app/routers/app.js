@@ -414,7 +414,7 @@
         '<div class="ferr" id="login-email-err" hidden></div></div>' +
         '<div class="mt12"><button class="btn primary" id="login-btn" type="submit">Continue</button></div>' +
         "</form>" +
-        '<div class="or">OR</div><div id="gis-btn"></div>' +
+        '<div class="or">OR</div><div id="gis-btn"><button type="button" class="gbtn" id="google-fallback"><b style="font-size:20px;color:#4285f4">G</b> Continue with Google</button></div>' +
         '<div id="demo-box"></div>' +
         '<p class="tiny muted center mt16">Use the email id registered at your club.<br/>Owner / staff accounts cannot open member screens.</p>';
       $("#login-form").addEventListener("submit", function (ev) {
@@ -428,6 +428,8 @@
         Views.doEmailLogin(email);
       });
       // Demo email login shortcuts hidden; use Google Sign-In instead.
+      var googleFallback = $("#google-fallback");
+      if (googleFallback) googleFallback.addEventListener("click", function () { Views.initGoogle(gcid); });
       if (gcid) Views.initGoogle(gcid);
     },
     loginBusy: function (busy) {
