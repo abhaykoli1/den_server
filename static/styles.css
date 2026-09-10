@@ -703,3 +703,32 @@ svg { flex: none; }
 }
 .theme-row { gap: 8px; }
 .theme-pick { padding: 13px 6px; font-size: 13.5px; }
+
+/* Keep dashboard/stat icons optically centered inside their circular tiles. */
+.stat-bubble,
+.qa-ic,
+.lic,
+.eart,
+.navbtn,
+.icon-btn,
+.brand-ball,
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+.stat-bubble > svg,
+.qa-ic > svg,
+.lic > svg,
+.eart > svg,
+.navbtn > svg,
+.icon-btn > svg,
+.brand-ball > svg,
+.avatar > svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  transform: translateY(0);
+}
