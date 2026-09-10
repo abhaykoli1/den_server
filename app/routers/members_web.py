@@ -33,11 +33,13 @@ def url_for(name, **kwargs):
     """Helper function to generate URLs for members app resources."""
     if name == 'members_web.manifest':
         return '/members/manifest.json'
+    elif name == 'members_web.styles_css':
+        return '/members/styles.css'
     elif name == 'members_web.app_js':
         return '/members/app.js'
     elif name == 'static':
         path = kwargs.get('path', '')
-        return f'/public{path}' if path.startswith('/') else f'/public/{path}'
+        return f'/members/static{path}' if path.startswith('/') else f'/members/static/{path}'
     return name
 
 
@@ -57,6 +59,19 @@ async def members_app(request: Request):
         url_for=url_for,  # Pass the url_for helper to template
     )
     return html
+
+
+@router.get("/static/{asset_path:path}", include_in_schema=False)
+async def static_asset(asset_path: str):
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "static", asset_path)
+    return FileResponse(path)
+
+
+@router.get("/styles.css", include_in_schema=False)
+async def styles_css():
+    """Serve the shared members design stylesheet copied from den_mem_web."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "static", "styles.css")
+    return FileResponse(path, media_type="text/css")
 
 
 @router.get("/app.js", include_in_schema=False)
