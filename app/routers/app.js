@@ -299,8 +299,8 @@
   };
 
   /* ---------------- router ---------------- */
-  var NAV_ROUTES = ["home", "tables", "order", "activity", "profile"];
-  var ALL_ROUTES = ["login", "clubs", "home", "tables", "wallet", "order", "orders", "activity", "frames", "profile", "settings"];
+  var NAV_ROUTES = ["home", "tables", "memberships", "activity", "profile"];
+  var ALL_ROUTES = ["login", "clubs", "home", "tables", "wallet", "memberships", "order", "orders", "activity", "frames", "profile", "settings"];
   var pollTimer = null;
   var pendingOrderQuery = "";
   var Router = {
@@ -339,7 +339,7 @@
       if (!Store.token && route === "login") { this.show("login"); Views.login(); return; }
       if (route === "login") { this.show("login"); Views.login(); return; }
       if (route === "clubs") { this.show("clubs"); Views.clubs(); return; }
-      if (!Store.dashboard && ["home", "tables", "wallet", "order", "orders", "activity", "frames", "profile", "settings"].indexOf(route) >= 0) {
+      if (!Store.dashboard && ["home", "tables", "wallet", "memberships", "order", "orders", "activity", "frames", "profile", "settings"].indexOf(route) >= 0) {
         this.show(route);
         Views.loading(route);
         Data.loadDashboard().then(function (d) {
@@ -353,6 +353,7 @@
       if (route === "home") Views.home();
       else if (route === "tables") { Views.tables(); this.poll(TABLES_POLL, function () { Data.loadDashboard({ silent: true }).then(function (d) { if (d && Router.current === "tables") Views.tables(true); }); }); }
       else if (route === "wallet") Views.wallet();
+      else if (route === "memberships") Views.memberships();
       else if (route === "order") Views.order();
       else if (route === "orders") { Views.orders(); this.poll(ORDERS_POLL, function () { Data.loadOrders().then(function () { if (Router.current === "orders") Views.orders(true); }).catch(function () {}); }); }
       else if (route === "activity") Views.activity();
@@ -937,6 +938,20 @@
           ferr.textContent = friendlyError(e); ferr.hidden = false;
         }
       });
+    },
+
+    memberships: async function () {
+      var host = $("#membership-plans-list");
+      host.innerHTML = skeletons(3, 120, 12);
+      try {
+        var r = await Api.get("/member-portal/membership-plans");
+        var plans = r.plans || [];
+        if (!plans.length) { host.innerHTML = emptyBlock(I.shield, "No plans available", "Your club has not published any membership plans yet.", ""); return; }
+        host.innerHTML = plans.map(function (p) {
+          var duration = p.days ? p.days + " days" : (p.frames ? p.frames + " frames" : (p.type || "Membership"));
+          return '<section class="card mt12"><div class="spread"><div><b class="card-title">' + esc(p.name || "Membership") + '</b><div class="muted small mt8">' + esc(duration) + '</div></div><b style="font-size:20px">₹' + money(p.amount || 0) + '</b></div>' + (p.description ? '<p class="muted small">' + esc(p.description) + '</p>' : '') + '<button class="btn primary sm block mt12" disabled>Buy Membership · Contact Club</button></section>';
+        }).join("");
+      } catch (e) { host.innerHTML = errBlock("Could not load memberships", friendlyError(e), true); }
     },
 
     /* ---------- ORDER ---------- */

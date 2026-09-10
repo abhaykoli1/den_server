@@ -90,6 +90,14 @@ async def dashboard(user: dict = Depends(current_user)):
     }
 
 
+@router.get("/membership-plans")
+async def membership_plans(user: dict = Depends(current_user)):
+    db, member, club = await _member_context(user)
+    plans = await db.plans.find({"clubId": club["id"], "active": {"$ne": False}}).to_list(None)
+    for plan in plans: plan.pop("_id", None)
+    return {"plans": plans, "club": {k: v for k, v in club.items() if k != "_id"}, "currentPlanId": member.get("planId")}
+
+
 @router.get("/rankings")
 async def rankings(user: dict = Depends(current_user)):
     db, member, club = await _member_context(user)
