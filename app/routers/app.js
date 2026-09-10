@@ -949,8 +949,14 @@
         if (!plans.length) { host.innerHTML = emptyBlock(I.shield, "No plans available", "Your club has not published any membership plans yet.", ""); return; }
         host.innerHTML = plans.map(function (p) {
           var duration = p.days ? p.days + " days" : (p.frames ? p.frames + " frames" : (p.type || "Membership"));
-          return '<section class="card mt12"><div class="spread"><div><b class="card-title">' + esc(p.name || "Membership") + '</b><div class="muted small mt8">' + esc(duration) + '</div></div><b style="font-size:20px">₹' + money(p.amount || 0) + '</b></div>' + (p.description ? '<p class="muted small">' + esc(p.description) + '</p>' : '') + '<button class="btn primary sm block mt12" disabled>Buy Membership · Contact Club</button></section>';
+          return '<section class="card mt12"><div class="spread"><div><b class="card-title">' + esc(p.name || "Membership") + '</b><div class="muted small mt8">' + esc(duration) + '</div></div><b style="font-size:20px">₹' + money(p.amount || 0) + '</b></div>' + (p.description ? '<p class="muted small">' + esc(p.description) + '</p>' : '') + '<button class="btn primary sm block mt12" data-buy-plan="' + esc(p.id) + '">Buy Membership</button></section>';
         }).join("");
+        $all("[data-buy-plan]", host).forEach(function (b) { b.addEventListener("click", function () {
+          var plan = plans.find(function (x) { return x.id === b.getAttribute("data-buy-plan"); });
+          var qr = (Store.dashboard && Store.dashboard.club && Store.dashboard.club.qrCode) || "";
+          Sheet.open('<h2>Buy ' + esc(plan.name || "Membership") + '</h2><p class="muted small">Pay ₹' + money(plan.amount || 0) + ' using your club QR, then enter the UTR/reference number.</p>' + (qr ? '<div class="qrbox mt12"><img src="' + qr.replace(/"/g, "") + '" alt="Club payment QR" /></div>' : '<div class="alert yellow mt12">Club payment QR is not configured. Contact the club.</div>') + '<div class="field mt12"><label for="membership-utr">UPI UTR / reference number</label><input class="input" id="membership-utr" maxlength="80" placeholder="Enter UTR number" /></div><div id="membership-err"></div><button class="btn primary block mt12" id="membership-submit">Submit payment request</button>', "Membership payment");
+          $("#membership-submit").addEventListener("click", async function () { var utr = $("#membership-utr").value.trim(); if (utr.length < 4) { $("#membership-err").innerHTML = errBlock("Invalid UTR", "Enter a valid payment reference number.", false); return; } this.disabled = true; try { var r = await Api.post("/member-portal/membership-requests", { planId: plan.id, utr: utr }); Sheet.close(); toast(r.message || "Request submitted", "ok"); } catch (e) { this.disabled = false; $("#membership-err").innerHTML = errBlock("Could not submit", friendlyError(e), false); } });
+        }); });
       } catch (e) { host.innerHTML = errBlock("Could not load memberships", friendlyError(e), true); }
     },
 

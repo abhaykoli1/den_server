@@ -90,6 +90,26 @@ async def dashboard(user: dict = Depends(current_user)):
     }
 
 
+class MembershipRequestIn(In):
+    planId: str
+    utr: str
+
+
+@router.post("/membership-requests", status_code=201)
+async def create_membership_request(payload: MembershipRequestIn, user: dict = Depends(current_user)):
+    db, member, club = await _member_context(user)
+    plan = await db.plans.find_one({"id": payload.planId, "clubId": club["id"], "active": {"$ne": False}})
+    if not plan: raise HTTPException(404, "Membership plan not found")
+    utr = payload.utr.strip()
+    if len(utr) < 4: raise HTTPException(400, "Enter a valid UTR/reference number")
+    existing = await db.membership_requests.find_one({"memberId": member["id"], "planId": plan["id"], "status": "pending"})
+    if existing: return {"request": {k:v for k,v in existing.items() if k != "_id"}, "message": "Request already pending"}
+    request = {"id": uid("mreq"), "clubId": club["id"], "memberId": member["id"], "memberName": member.get("name", ""), "planId": plan["id"], "planName": plan.get("name", ""), "amount": plan.get("amount", 0), "utr": utr, "status": "pending", "createdAt": now_iso()}
+    await db.membership_requests.insert_one(request)
+    request.pop("_id", None)
+    return {"request": request, "message": "Membership request submitted for verification"}
+
+
 @router.get("/membership-plans")
 async def membership_plans(user: dict = Depends(current_user)):
     db, member, club = await _member_context(user)
