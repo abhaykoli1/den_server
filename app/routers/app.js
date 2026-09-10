@@ -405,7 +405,7 @@
     login: function () {
       if (Store.token) { Router.go("home"); return; }
       var box = $("#login-box");
-      var gcid = (CFG.GOOGLE_CLIENT_ID || "").trim();
+      var gcid = (CFG.GOOGLE_CLIENT_ID || "375395125425-st5ba3fcsu5nqkcioovofa2ib1s21gmh.apps.googleusercontent.com").trim();
       box.innerHTML =
         '<div id="login-err"></div>' +
         '<form id="login-form" novalidate>' +
@@ -414,7 +414,7 @@
         '<div class="ferr" id="login-email-err" hidden></div></div>' +
         '<div class="mt12"><button class="btn primary" id="login-btn" type="submit">Continue</button></div>' +
         "</form>" +
-        (gcid ? '<div class="or">OR</div><div id="gis-btn"></div>' : "") +
+        '<div class="or">OR</div><div id="gis-btn"></div>' +
         '<div id="demo-box"></div>' +
         '<p class="tiny muted center mt16">Use the email id registered at your club.<br/>Owner / staff accounts cannot open member screens.</p>';
       $("#login-form").addEventListener("submit", function (ev) {
