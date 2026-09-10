@@ -110,6 +110,14 @@ class Settings:
     MAIL_FROM: str = os.environ.get("MAIL_FROM", "Rowdy's Den <no-reply@localhost>")
     APP_PUBLIC_URL: str = os.environ.get("APP_PUBLIC_URL", "")
 
+    # --- members web app (Jinja2-rendered SPA)
+    MEMBERS_WEB_API_BASE: str = os.environ.get("MEMBERS_WEB_API_BASE", "/api")
+    MEMBERS_WEB_GOOGLE_CLIENT_ID: str = os.environ.get("MEMBERS_WEB_GOOGLE_CLIENT_ID", "")
+    MEMBERS_WEB_CLUB_TIMEZONE: str = os.environ.get("MEMBERS_WEB_CLUB_TIMEZONE", "Asia/Kolkata")
+    MEMBERS_WEB_TABLES_POLL_MS: int = _int_env("MEMBERS_WEB_TABLES_POLL_MS", 20000)
+    MEMBERS_WEB_ORDERS_POLL_MS: int = _int_env("MEMBERS_WEB_ORDERS_POLL_MS", 45000)
+    MEMBERS_WEB_ENABLED: bool = _flag("MEMBERS_WEB_ENABLED", True)
+
     @property
     def is_mock_db(self) -> bool:
         return self.MONGODB_URI.startswith("mongomock://")

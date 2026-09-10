@@ -6,11 +6,39 @@ estimates — every rupee is computed and persisted here.
 ## Quick start (dev)
 
 ```bash
-cd backend
 pip install -r requirements.txt
-cp .env.example .env          # or use the provided .env
-python3 run.py                # http://0.0.0.0:8000 · docs at /docs
+MONGODB_URI="mongomock://demo" AUTH_DEV_MODE=true python3 run.py
+# http://0.0.0.0:8000 · docs at /docs · members app at /members
 ```
+
+**Or use the quick start script:**
+```bash
+./start-members-app.sh          # macOS/Linux
+start-members-app.bat           # Windows
+```
+
+## 📱 Members Web App
+
+The members web app is **now integrated** into this backend!
+
+- **Access**: http://localhost:8000/members
+- **No separate server needed** — runs as part of den_server
+- **Configuration**: See [MEMBERS_WEB.md](./MEMBERS_WEB.md)
+
+Key features:
+- ✅ Mobile-optimized (430px design)
+- ✅ Live tables with timers
+- ✅ Wallet & payment management
+- ✅ Food ordering
+- ✅ Activity feed
+- ✅ PWA installable
+- ✅ Light/dark theme
+
+Demo logins:
+- `ravi@example.com` (Wallet member)
+- `arjun@example.com` (Has dues)
+
+## Full Setup
 
 Dev out of the box: `MONGODB_URI=mongomock://demo` runs fully in-memory with
 **snapshot persistence** — every 5s + on shutdown all collections dump to

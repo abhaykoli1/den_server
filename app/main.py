@@ -14,7 +14,7 @@ from .config import settings
 from .db import dump_snapshot, get_db
 from .routers import (auth, bookings, clubs, expenses, frames, items, logs, master,
                       member_portal, members, plans, platform, reports, sessions,
-                      subscriptions, tables, team, tournaments)
+                      subscriptions, tables, team, tournaments, members_web)
 
 app = FastAPI(title="Rowdy's Den — Club Billing API",
               version="3.22.2", docs_url="/docs")
@@ -78,6 +78,10 @@ app.include_router(plans.router, prefix=API_PREFIX)
 app.include_router(sessions.router, prefix=API_PREFIX)
 app.include_router(frames.router, prefix=API_PREFIX)
 app.include_router(logs.router, prefix=API_PREFIX)
+
+# Members web app (Jinja2-rendered SPA)
+if settings.MEMBERS_WEB_ENABLED:
+    app.include_router(members_web.router)
 app.include_router(items.router, prefix=API_PREFIX)
 app.include_router(expenses.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)

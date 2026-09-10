@@ -1,0 +1,122 @@
+#!/bin/bash
+# Quick Google OAuth Setup for Rowdy's Den Members App
+
+cat << 'EOF'
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║              🔐 GOOGLE OAUTH SETUP — Members App                          ║
+║                                                                            ║
+║              Add "Sign in with Google" to your members app                 ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+⏱️  SETUP TIME: 5-10 minutes
+
+═══════════════════════════════════════════════════════════════════════════
+
+STEP 1: Create Google OAuth Credentials (5 minutes)
+───────────────────────────────────────────────────
+
+1. Go to: https://console.cloud.google.com/
+2. Sign in with your Google account
+3. Create new project: "Rowdy's Den Members"
+4. Enable API:
+   → APIs & Services → Library
+   → Search "Google Identity Services"
+   → Click ENABLE
+5. Create OAuth consent screen:
+   → APIs & Services → OAuth consent screen
+   → Select "External"
+   → Fill app name, email, etc.
+   → SAVE AND CONTINUE
+6. Create OAuth 2.0 Client ID:
+   → APIs & Services → Credentials
+   → CREATE CREDENTIALS → OAuth client ID
+   → Select "Web application"
+   → Add Authorized redirect URIs:
+      • http://localhost:8000
+      • http://127.0.0.1:8000
+      • https://yourdomain.com (production)
+   → CREATE
+7. Copy your Client ID (looks like: xxxxxxxx.apps.googleusercontent.com)
+
+═══════════════════════════════════════════════════════════════════════════
+
+STEP 2: Configure Rowdy's Den (2 minutes)
+─────────────────────────────────────────
+
+LOCAL DEVELOPMENT:
+
+1. Edit den_server/.env
+2. Add these two lines:
+   
+   MEMBERS_WEB_GOOGLE_CLIENT_ID=YOUR_CLIENT_ID.apps.googleusercontent.com
+   GOOGLE_CLIENT_ID=YOUR_CLIENT_ID.apps.googleusercontent.com
+
+3. Save and restart the server:
+   
+   cd den_server
+   ./start-members-app.sh
+
+PRODUCTION (Vercel):
+
+1. Go to Vercel dashboard
+2. Project Settings → Environment Variables
+3. Add:
+   Name: MEMBERS_WEB_GOOGLE_CLIENT_ID
+   Value: YOUR_CLIENT_ID.apps.googleusercontent.com
+   
+   Name: GOOGLE_CLIENT_ID
+   Value: YOUR_CLIENT_ID.apps.googleusercontent.com
+   
+4. Redeploy
+
+═══════════════════════════════════════════════════════════════════════════
+
+STEP 3: Test Google Login (2 minutes)
+──────────────────────────────────────
+
+1. Start the backend:
+   $ cd den_server
+   $ ./start-members-app.sh
+
+2. Open the app:
+   → http://localhost:8000/members
+
+3. Look for "Sign in with Google" button on login screen
+
+4. Click and test:
+   → You should see Google login dialog
+   → After login, you'll be logged in!
+
+═══════════════════════════════════════════════════════════════════════════
+
+⚠️  TROUBLESHOOTING
+
+"Google button not showing?"
+  → Check .env: MEMBERS_WEB_GOOGLE_CLIENT_ID should have a value
+  → Restart: ./start-members-app.sh
+  → Check browser console: F12 → Console tab
+
+"Invalid OAuth Client ID error?"
+  → Google Console → Credentials → Your OAuth Client ID
+  → Check "Authorized redirect URIs" includes your domain
+  → Wait 1-2 minutes, then retry
+
+"CORS or redirect error?"
+  → Update Google Console with your full domain
+  → Make sure CORS_ORIGINS in .env includes your domain
+  → Restart server
+
+═══════════════════════════════════════════════════════════════════════════
+
+📚 FULL DOCUMENTATION
+
+See: den_server/GOOGLE_OAUTH_SETUP.md
+
+═══════════════════════════════════════════════════════════════════════════
+
+✅ DONE! Your members app now has Google login!
+
+EOF

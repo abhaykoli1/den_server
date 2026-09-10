@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+# Implementation Summary: Rowdy's Den Members App Integration
+
+cat << 'EOF'
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║    ✅  MEMBERS APP MIGRATION COMPLETE — Jinja2 Integration Done!         ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📋 WHAT WAS ACCOMPLISHED
+═══════════════════════════════════════════════════════════════════════════
+
+✅ Migrated members web app from standalone (den_mem_web) to integrated
+   (den_server) using Jinja2 templates
+
+✅ No separate Python process needed anymore — everything runs in one
+   FastAPI server
+
+✅ Configuration-driven app initialization via Jinja2 template rendering
+
+✅ Same-origin API calls — zero CORS configuration needed
+
+✅ All features preserved:
+   • Email sign-in + Google OAuth
+   • Club picker
+   • Live tables
+   • Wallet & payments
+   • Food ordering
+   • Activity feed
+   • Frames & matches
+   • Profile & settings
+   • Dark/light theme
+   • PWA installable
+
+═══════════════════════════════════════════════════════════════════════════
+
+🚀 QUICK START — TWO WAYS
+═══════════════════════════════════════════════════════════════════════════
+
+METHOD 1: Using the Quick Start Script
+─────────────────────────────────────
+  
+  macOS/Linux:
+  $ cd den_server
+  $ ./start-members-app.sh
+  
+  Windows:
+  > cd den_server
+  > start-members-app.bat
+
+METHOD 2: Manual Command
+─────────────────────────
+
+  $ cd /Users/santa/Workspace/den/den_server
+  $ pip install -r requirements.txt
+  $ MONGODB_URI="mongomock://demo" AUTH_DEV_MODE=true PORT=8000 python3 run.py
+
+THEN OPEN:
+$ open http://localhost:8000/members
+
+═══════════════════════════════════════════════════════════════════════════
+
+📱 APP LOCATIONS
+═══════════════════════════════════════════════════════════════════════════
+
+Members App:  http://localhost:8000/members
+API Docs:     http://localhost:8000/docs
+Backend API:  http://localhost:8000/api
+
+Test Logins (when AUTH_DEV_MODE=true):
+  📧 ravi@example.com      (member with wallet)
+  📧 arjun@example.com     (member with dues)
+
+═══════════════════════════════════════════════════════════════════════════
+
+⚙️  CONFIGURATION (Environment Variables)
+═══════════════════════════════════════════════════════════════════════════
+
+Location 1: Local .env file
+  Path: den_server/.env
+  
+  MEMBERS_WEB_API_BASE=/api
+  MEMBERS_WEB_GOOGLE_CLIENT_ID=your-oauth-client-id
+  MEMBERS_WEB_CLUB_TIMEZONE=Asia/Kolkata
+  MEMBERS_WEB_TABLES_POLL_MS=20000
+  MEMBERS_WEB_ORDERS_POLL_MS=45000
+  MEMBERS_WEB_ENABLED=true
+
+Location 2: Production (Vercel, etc.)
+  → Go to Project Settings → Environment Variables
+  → Add each MEMBERS_WEB_* variable
+
+Location 3: Runtime (Command Line)
+  $ export MEMBERS_WEB_GOOGLE_CLIENT_ID="your-id"
+  $ python3 run.py
+
+═══════════════════════════════════════════════════════════════════════════
+
+📁 FILE STRUCTURE (What Was Created)
+═══════════════════════════════════════════════════════════════════════════
+
+den_server/
+├── templates/members/base.html       ← Jinja2 template (22KB)
+├── app/
+│   ├── config.py                     ← Updated: MEMBERS_WEB_* settings
+│   ├── main.py                       ← Updated: import members_web router
+│   └── routers/
+│       ├── members_web.py            ← NEW: FastAPI router for /members
+│       └── app.js                    ← NEW: Copied from den_mem_web (89KB)
+├── MEMBERS_WEB.md                    ← NEW: Detailed documentation
+├── start-members-app.sh              ← NEW: Quick start script (macOS/Linux)
+├── start-members-app.bat             ← NEW: Quick start script (Windows)
+└── README.md                         ← Updated: mentions members app
+
+═══════════════════════════════════════════════════════════════════════════
+
+🔧 CONFIGURATION GUIDE: WHERE TO SET THE URL
+═══════════════════════════════════════════════════════════════════════════
+
+The app is configured via environment variables in these priority order:
+
+1. HIGHEST: Runtime environment variables
+   $ export MEMBERS_WEB_API_BASE=/api
+   $ python3 run.py
+
+2. MEDIUM: .env file (den_server/.env)
+   MEMBERS_WEB_API_BASE=/api
+   
+3. LOWEST: Defaults (in app/config.py)
+   API_BASE defaults to: /api
+   TIMEZONE defaults to: Asia/Kolkata
+
+APP ROUTES:
+  /members                 ← Main app (Jinja2 rendered)
+  /members/app.js          ← App logic
+  /members/manifest.json   ← PWA manifest
+
+TO CHANGE PORT:
+  $ PORT=3000 python3 run.py
+  → App will be at http://localhost:3000/members
+
+TO CHANGE THE /members PATH:
+  Edit den_server/app/routers/members_web.py
+  Change: router = APIRouter(prefix="/members", ...)
+  To:     router = APIRouter(prefix="/app/members", ...)
+  
+  Then access at: http://localhost:8000/app/members
+
+═══════════════════════════════════════════════════════════════════════════
+
+💡 HOW IT WORKS (Technical Overview)
+═══════════════════════════════════════════════════════════════════════════
+
+OLD ARCHITECTURE:
+  Client → den_mem_web (Python) → den_server (FastAPI)
+  2 processes, CORS needed
+
+NEW ARCHITECTURE:
+  Client → den_server (FastAPI) with Jinja2
+     ├── /members → Renders base.html with config
+     ├── /members/app.js → Serves app.js
+     └── /api/* → All existing backend endpoints
+
+CONFIG INJECTION:
+  1. User requests: GET /members
+  2. FastAPI handler renders: Jinja2("base.html", config={...})
+  3. HTML includes: <script>window.DEN_CONFIG = {...}</script>
+  4. Client JS reads: window.DEN_CONFIG
+  5. API calls use: window.DEN_CONFIG.API_BASE (usually /api)
+
+SAME-ORIGIN: No CORS needed because frontend and backend are same server!
+
+═══════════════════════════════════════════════════════════════════════════
+
+✅ TESTING
+═══════════════════════════════════════════════════════════════════════════
+
+To verify everything works:
+
+1. Install requirements
+   $ pip install -r requirements.txt
+
+2. Start the server
+   $ MONGODB_URI="mongomock://demo" AUTH_DEV_MODE=true python3 run.py
+
+3. Open in browser
+   $ open http://localhost:8000/members
+
+4. Test login with: ravi@example.com (password doesn't matter in dev mode)
+
+5. Check the features:
+   ✓ Home screen loads
+   ✓ Tables show live games
+   ✓ Wallet displays balance
+   ✓ Can view orders
+   ✓ Dark theme toggle works
+   ✓ Bottom nav navigation works
+
+═══════════════════════════════════════════════════════════════════════════
+
+📚 DOCUMENTATION
+═══════════════════════════════════════════════════════════════════════════
+
+For detailed info, see:
+  • den_server/MEMBERS_WEB.md           ← Complete guide
+  • den_server/README.md                ← Backend overview
+  • den_server/app/config.py            ← All settings
+  • den_server/app/routers/members_web.py ← Route implementation
+
+═══════════════════════════════════════════════════════════════════════════
+
+🎉 YOU'RE ALL SET!
+═══════════════════════════════════════════════════════════════════════════
+
+The members app is now fully integrated. To get started:
+
+  $ cd /Users/santa/Workspace/den/den_server
+  $ ./start-members-app.sh
+
+Then open: http://localhost:8000/members
+
+Questions? Check MEMBERS_WEB.md or the code comments.
+
+═══════════════════════════════════════════════════════════════════════════
+
+EOF
