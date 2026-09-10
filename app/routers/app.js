@@ -427,14 +427,7 @@
         ferr.hidden = true;
         Views.doEmailLogin(email);
       });
-      if (Auth.devMode) {
-        $("#demo-box").innerHTML = '<p class="tiny muted" style="margin:14px 0 0">Try the demo club:</p>' +
-          '<div class="demo-chips"><button type="button" data-demo="ravi@example.com">ravi@example.com · wallet</button>' +
-          '<button type="button" data-demo="arjun@example.com">arjun@example.com · due</button></div>';
-        $all("[data-demo]", box).forEach(function (b) {
-          b.addEventListener("click", function () { $("#login-email").value = b.getAttribute("data-demo"); Views.doEmailLogin(b.getAttribute("data-demo")); });
-        });
-      }
+      // Demo email login shortcuts hidden; use Google Sign-In instead.
       if (gcid) Views.initGoogle(gcid);
     },
     loginBusy: function (busy) {

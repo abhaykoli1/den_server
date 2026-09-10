@@ -170,7 +170,7 @@
   </div>
 
   <script>
-    var CFG = { API_BASE: "{{ api_base }}", GOOGLE_CLIENT_ID: "{{ google_client_id }}", CLUB_TIMEZONE: "{{ club_timezone }}", TABLES_POLL_MS: {{ tables_poll_ms }}, ORDERS_POLL_MS: {{ orders_poll_ms }} };
+    var CFG = { API_BASE: "{{ api_base }}", GOOGLE_CLIENT_ID: "{{ google_client_id or '375395125425-st5ba3fcsu5nqkcioovofa2ib1s21gmh.apps.googleusercontent.com' }}", CLUB_TIMEZONE: "{{ club_timezone }}", TABLES_POLL_MS: {{ tables_poll_ms }}, ORDERS_POLL_MS: {{ orders_poll_ms }} };
     var API_BASE = CFG.API_BASE;
     var TABLES_POLL = CFG.TABLES_POLL_MS;
     var ORDERS_POLL = CFG.ORDERS_POLL_MS;
