@@ -52,7 +52,7 @@ async def members_app(request: Request):
     # Inject configuration into template
     html = template.render(
         api_base=settings.MEMBERS_WEB_API_BASE or "/api",
-        google_client_id=settings.MEMBERS_WEB_GOOGLE_CLIENT_ID or "",
+        google_client_id=settings.MEMBERS_WEB_GOOGLE_CLIENT_ID or settings.GOOGLE_CLIENT_ID or "375395125425-st5ba3fcsu5nqkcioovofa2ib1s21gmh.apps.googleusercontent.com",
         club_timezone=settings.MEMBERS_WEB_CLUB_TIMEZONE or "Asia/Kolkata",
         tables_poll_ms=settings.MEMBERS_WEB_TABLES_POLL_MS or 20000,
         orders_poll_ms=settings.MEMBERS_WEB_ORDERS_POLL_MS or 45000,
