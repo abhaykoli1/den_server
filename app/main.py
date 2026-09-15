@@ -4,11 +4,14 @@ HTTP contract: 200/201 ok · 400 readable · 401 auth · 402 subscription lock �
 403 role/tenant/admin-area · 404 · 500 clean JSON (no stack traces) · 422 → 400.
 """
 import traceback
+import secrets
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from .config import settings
 from .db import dump_snapshot, get_db
@@ -17,7 +20,8 @@ from .routers import (auth, bookings, clubs, expenses, frames, items, logs, mast
                       subscriptions, tables, team, tournaments, members_web)
 
 app = FastAPI(title="Rowdy's Den — Club Billing API",
-              version="3.22.2", docs_url="/docs")
+              version="3.22.2", docs_url=None, openapi_url=None)
+docs_basic = HTTPBasic()
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,6 +68,34 @@ async def root():
 async def health():
     return {"ok": True, "db": "mongomock" if settings.is_mock_db else "mongo",
             "authDevMode": settings.AUTH_DEV_MODE}
+
+
+def _docs_auth(credentials: HTTPBasicCredentials = Depends(docs_basic)):
+    valid_user = secrets.compare_digest(
+        credentials.username, settings.DOCS_USERNAME
+    )
+    valid_password = secrets.compare_digest(
+        credentials.password, settings.DOCS_PASSWORD
+    )
+    if not settings.DOCS_USERNAME or not settings.DOCS_PASSWORD:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not (valid_user and valid_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Docs authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials
+
+
+@app.get("/docs", include_in_schema=False)
+async def docs(_: HTTPBasicCredentials = Depends(_docs_auth)):
+    return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{app.title} - Swagger UI")
+
+
+@app.get("/openapi.json", include_in_schema=False)
+async def openapi(_: HTTPBasicCredentials = Depends(_docs_auth)):
+    return app.openapi()
 
 
 API_PREFIX = "/api"

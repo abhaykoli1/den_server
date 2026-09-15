@@ -80,6 +80,8 @@ class Settings:
     ]
     AUTH_DEV_MODE: bool = _flag("AUTH_DEV_MODE", True)
     AUTH_DISABLED: bool = _flag("AUTH_DISABLED", False)
+    DOCS_USERNAME: str = os.environ.get("DOCS_USERNAME", "")
+    DOCS_PASSWORD: str = os.environ.get("DOCS_PASSWORD", "")
     MASTER_ADMIN_EMAILS = [
         e.strip().lower()
         for e in os.environ.get("MASTER_ADMIN_EMAILS", "master@rowdys.dev").split(",")
