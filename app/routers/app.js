@@ -565,6 +565,7 @@
       var liveCount = Object.keys(liveMap).length;
       var due = Number(m.dueAmount) || 0, wal = Number(m.walletBalance) || 0;
       var pass = Number(m.passFramesLeft) || 0;
+      var isOpen = c.settings && c.settings.isOpen !== false;
       var rankTxt = Store.rankings && Store.rankings.me ? "#" + Store.rankings.me.rank : "—";
       var alerts = computeAlerts();
       var acts = (Store.dashboard.activity || []).slice(0, 3);
@@ -574,8 +575,13 @@
       var firstLiveTable = firstLive ? tables.filter(function (t) { return t.id === firstLiveId; })[0] : null;
 
       var h = "";
+      var statusBadge = $("#club-status-badge");
+      if (statusBadge) {
+        statusBadge.textContent = isOpen ? "OPEN" : "CLOSED";
+        statusBadge.className = "club-status-badge " + (isOpen ? "open" : "closed");
+      }
       // wallet + membership card (lavender)
-      h += '<section class="card lav" aria-label="Wallet and membership">' +
+      h += '<section class="card lav" style="marginTop:16px" aria-label="Wallet and membership">' +
         '<div class="spread"><span class="card-title">Wallet &amp; Membership</span><button class="link-btn" style="color:inherit;padding:6px" data-go="wallet" aria-label="Open wallet">' + I.chevR + "</button></div>" +
         '<div class="stat-row">' +
         statBtn("wallet", I.wallet, "Wallet", money(wal)) +
@@ -653,8 +659,8 @@
       });
       var liveCount = Object.keys(liveMap).length;
       $("#tables-note").textContent = liveCount
-        ? liveCount + " live · " + (tables.length - liveCount) + " free — estimates are computed live by the club counter."
-        : tables.length ? "All tables free — estimates appear here when a game starts." : "";
+        ? liveCount + " live · " + (tables.length - liveCount) + " free"
+        : tables.length ? "All tables free" : "";
       var grid = $("#tables-grid");
       if (!tables.length) {
         grid.innerHTML = emptyBlock(I.info, "No tables found", "The club hasn't added tables yet.", "");
@@ -669,14 +675,13 @@
         var live = !!s;
         var r = t.rate || {};
         var players = s ? (s.players || []).map(function (p) { return p.label; }).filter(Boolean) : [];
-        var est = s && s.preview && s.preview.estimate != null ? money(s.preview.estimate) : null;
         var peak = r.peakHourlyRate ? "Peak " + money(r.peakHourlyRate) + "/hr " + r.peakStartHour + "–" + r.peakEndHour : "No peak pricing";
         return '<article class="tfull" aria-label="' + esc(t.name) + ", " + (live ? "live" : "free") + '">' +
           '<div class="tfull-art ' + (live ? "live" : "free") + '">' +
           '<span class="status-tag ' + (live ? "live" : "free") + '">' + (live ? '<span class="pulse"></span>LIVE' : "○ FREE") + "</span>" +
           (live
-            ? '<div class="elapsed" data-since="' + esc(s.startedAt || "") + '">0:00</div><div class="tsub">' + esc(players.slice(0, 3).join(" · ") || "In play") + (est ? " · counter ≈ " + est : "") + "</div>"
-            : '<div class="elapsed" style="font-size:24px">Ready to play</div><div class="tsub">' + money(r.hourlyRate || 0) + "/hr · Min " + money(r.minCharge || 0) + "</div>") +
+            ? '<div class="elapsed" data-since="' + esc(s.startedAt || "") + '">0:00</div><div class="tsub">' + esc(players.slice(0, 3).join(" · ") || "In play") + "</div>"
+            : '<div class="elapsed" style="font-size:20px">Ready to play</div><div class="tsub">' + money(r.hourlyRate || 0) + "/hr · Min " + money(r.minCharge || 0) + "</div>") +
           "</div>" +
           '<div class="tfull-body"><div class="spread"><span class="tfull-name">' + esc(t.name) + "</span>" +
           '<button class="link-btn" data-table="' + esc(t.id) + '">Details</button></div>' +
@@ -741,14 +746,18 @@
       var state = { date: today, start: pad2(dh) + ":00", end: pad2((dh + 1) % 24) + ":00", players: 2 };
       var STARTS = hmOptions(8, 22), ENDS = hmOptions(8, 23);
       if (STARTS.indexOf(state.start) < 0) state.start = "10:00";
+      function playerRate() {
+         var rates = r.ratesByPlayers || {};
+         return Number(rates[String(state.players)] || r.hourlyRate || 0);
+      }
       Sheet.open(
         '<b style="font-size:18px">Book ' + esc(t.name) + "</b>" +
-        '<p class="muted small">' + money(r.hourlyRate || 0) + "/hr · Min " + money(r.minCharge || 0) + " · free cancellation until the slot starts</p>" +
+        '<p class="muted small"><span id="bk-rate">' + money(playerRate()) + "/hr · " + state.players + " players</span> · Min " + money(r.minCharge || 0) + " · free cancellation until the slot starts</p>" +
         '<div class="field"><label for="bk-date">Date</label><input class="input" id="bk-date" type="date" min="' + today + '" max="' + maxD + '" value="' + today + '" /></div>' +
         '<div class="taken-chips" id="bk-taken"></div>' +
         '<div class="time-grid"><div class="field"><label for="bk-start">From</label><select class="input" id="bk-start"></select></div>' +
         '<div class="field"><label for="bk-end">To</label><select class="input" id="bk-end"></select></div></div>' +
-        '<div class="field"><label>Players</label><div><span class="qty"><button id="bk-minus" aria-label="Fewer players">' + I.minus + '</button><b id="bk-pcount">2</b><button id="bk-plus" aria-label="More players">' + I.plus + "</button></span></div></div>" +
+        '<div class="field"><label>Players</label><div><span class="qty"><button id="bk-minus" aria-label="Fewer players">' + I.minus + '</button><b id="bk-pcount">2</b><button id="bk-plus" aria-label="More players">' + I.plus + "</button></span><div class=\"tiny muted mt8\">2 to 4 players</div></div></div>" +
         '<div class="field"><label for="bk-notes">Note for the counter (optional)</label><input class="input" id="bk-notes" maxlength="120" placeholder="e.g. need 4 cues" /></div>' +
         '<div class="ferr" id="bk-err" hidden></div>' +
         '<div class="mt16"><button class="btn primary" id="bk-confirm">Confirm Booking</button></div>',
@@ -774,12 +783,17 @@
         if (sMs <= Date.now() + Store.clockOffsetMs + 5 * 60000) return "Pick a start time at least a few minutes in the future.";
         return "";
       }
-      function refresh() { paintTaken(); var msg = validate(); errEl.hidden = !msg; errEl.textContent = msg; goBtn.disabled = !!msg; }
+      function refresh() {
+        paintTaken();
+        $("#bk-rate").textContent = money(playerRate()) + "/hr · " + state.players + " players";
+        $("#bk-pcount").textContent = state.players;
+        var msg = validate(); errEl.hidden = !msg; errEl.textContent = msg; goBtn.disabled = !!msg;
+      }
       dateEl.addEventListener("change", function () { state.date = dateEl.value || today; refresh(); });
       startEl.addEventListener("change", function () { state.start = startEl.value; fillTimes(); refresh(); });
       endEl.addEventListener("change", function () { state.end = endEl.value; refresh(); });
-      $("#bk-minus").addEventListener("click", function () { state.players = Math.max(1, state.players - 1); $("#bk-pcount").textContent = state.players; });
-      $("#bk-plus").addEventListener("click", function () { state.players = Math.min(8, state.players + 1); $("#bk-pcount").textContent = state.players; });
+      $("#bk-minus").addEventListener("click", function () { state.players = Math.max(2, state.players - 1); refresh(); });
+      $("#bk-plus").addEventListener("click", function () { state.players = Math.min(4, state.players + 1); refresh(); });
       fillTimes(); refresh();
       goBtn.addEventListener("click", async function () {
         var msg = validate();
@@ -809,7 +823,6 @@
       var live = !!s;
       var r = t.rate || {};
       var players = s ? (s.players || []).map(function (p) { return p.label; }).filter(Boolean) : [];
-      var pv = (s && s.preview) || null;
       var peak = r.peakHourlyRate ? "Peak " + money(r.peakHourlyRate) + "/hr (" + r.peakStartHour + ":00–" + r.peakEndHour + ":00)" : "No peak pricing";
       Sheet.open(
         '<div class="spread"><b style="font-size:18px">' + esc(t.name) + "</b>" +
@@ -821,9 +834,6 @@
         '<div class="kv"><span>Minimum charge</span><b>' + money(r.minCharge || 0) + "</b></div>" +
         '<div class="kv"><span>Peak</span><b>' + esc(peak) + "</b></div>" +
         (r.ratesByPlayers && Object.keys(r.ratesByPlayers).length ? '<div class="kv"><span>Group rates</span><b>' + esc(Object.keys(r.ratesByPlayers).map(function (k) { return k + "p " + money(r.ratesByPlayers[k]); }).join(" · ")) + "</b></div>" : "") +
-        (pv ? '<div class="card soft mt12"><b>Counter estimate — ' + money(pv.estimate) + "</b>" +
-          '<div class="tiny muted mt8">Table ' + money(pv.tableAmount) + (pv.itemsAmount ? " · Food " + money(pv.itemsAmount) : "") + (pv.gloveCharges ? " · Gloves " + money(pv.gloveCharges) : "") + " · " + (pv.minutes || 0) + " min elapsed.<br/>Computed live by the club server — the final bill is made at checkout.</div></div>"
-          : "") +
         (Booking.supported ? '<div class="mt12"><button class="btn primary block" id="sheet-book">' + I.cal + " Book Slot</button></div>" : "") +
         '<div class="mt12"><button class="btn ghost block" id="sheet-close">Close</button></div>',
         t.name + " details"
@@ -949,7 +959,7 @@
         if (!plans.length) { host.innerHTML = emptyBlock(I.shield, "No plans available", "Your club has not published any membership plans yet.", ""); return; }
         host.innerHTML = plans.map(function (p) {
           var duration = p.days ? p.days + " days" : (p.frames ? p.frames + " frames" : (p.type || "Membership"));
-          return '<section class="card mt12"><div class="spread"><div><b class="card-title">' + esc(p.name || "Membership") + '</b><div class="muted small mt8">' + esc(duration) + '</div></div><b style="font-size:20px">₹' + money(p.amount || 0) + '</b></div>' + (p.description ? '<p class="muted small">' + esc(p.description) + '</p>' : '') + '<button class="btn primary sm block mt12" data-buy-plan="' + esc(p.id) + '">Buy Membership</button></section>';
+          return '<section class="card mt12"><div class="spread"><div><b class="card-title">' + esc(p.name || "Membership") + '</b><div class="muted small mt8">' + esc(duration) + '</div></div><b style="font-size:20px">' + money(p.amount || 0) + '</b></div>' + (p.description ? '<p class="muted small">' + esc(p.description) + '</p>' : '') + '<button class="btn primary sm block mt12" data-buy-plan="' + esc(p.id) + '">Buy Membership</button></section>';
         }).join("");
         $all("[data-buy-plan]", host).forEach(function (b) { b.addEventListener("click", function () {
           var plan = plans.find(function (x) { return x.id === b.getAttribute("data-buy-plan"); });
@@ -1108,7 +1118,9 @@
     /* ---------- ACTIVITY ---------- */
     actFilter: "all",
     actShown: 30,
-    ACTS: [["all", "All"], ["payments", "Payments"], ["orders", "Orders"], ["frames", "Frames"], ["membership", "Membership"], ["due", "Due"]],
+    ACTS: [["all", "All"],
+    // ["orders", "Orders"] ["payments", "Payments"]
+    , ["frames", "Frames"], ["due", "Due"] , ["membership", "Membership"] ],
     activity: function () {
       var chips = $("#activity-chips");
       chips.innerHTML = this.ACTS.map(function (x) {
@@ -1120,15 +1132,42 @@
       this.activityList();
     },
     activityList: function () {
+      var dueSummary = $("#activity-due-summary");
+      if (dueSummary) {
+        var dueAmount = Number(member().dueAmount) || 0;
+        dueSummary.innerHTML =
+          '<div class="activity-due-summary' + (dueAmount > 0 ? " has-due" : " cleared") + '">' +
+          '<b class="activity-due-amount">' + money(dueAmount) + "</b>" +
+          '<span class="activity-due-label">' + (dueAmount > 0 ? "Amount left to pay" : "All dues are cleared") + "</span>" +
+          "</div>";
+      }
       var all = (Store.dashboard.activity || []).slice();
+      var dueFrames = (Store.dashboard.dueFrames || []).map(function (frame) {
+        var settlement = frame.memberSettlement || {};
+        return {
+          id: "due-frame-" + (frame.id || ""),
+          type: "frames",
+          tag: "BILLING",
+          message: "Frame bill · " + (frame.tableName || "Table"),
+          createdAt: frame.createdAt,
+          amount: frame.memberDue,
+          mode: "due",
+          memberDue: frame.memberDue,
+          refType: "frame",
+          refId: frame.id,
+          due: true,
+          paidParts: settlement,
+        };
+      });
+      all = all.concat(dueFrames);
       var f = this.actFilter;
       var shown = all.filter(function (a) {
         if (f === "all") return true;
         if (f === "payments") return a.tag === "PAYMENT";
         if (f === "orders") return a.type === "items";
-        if (f === "frames") return a.type === "frames";
+        if (f === "frames") return a.type === "frames" && a.due === true;
         if (f === "membership") return a.type === "memberships";
-        if (f === "due") return a.type === "due";
+        if (f === "due") return a.type === "due" || a.due === true;
         return true;
       });
       var host = $("#activity-list");
@@ -1156,11 +1195,11 @@
       var settled = (Store.dashboard.activity || []).filter(function (a) { return a.type === "frames"; });
       var h = '<section class="card dark"><div class="spread"><span class="card-title">Season Record</span><span class="tag gold">RANK #' + esc(me.rank) + (total ? " / " + total : "") + "</span></div>" +
         '<div class="stat-row">' +
-        '<div class="stat"><span class="stat-bubble">' + I.zap + "</span><b>Played</b><span>" + (me.frames || 0) + "</span></div>" +
+        '<div class="stat"><span class="stat-bubble">' + I.check + "</span><b>Played</b><span>" + (me.frames || 0) + "</span></div>" +
         '<div class="stat"><span class="stat-bubble">' + I.trophy + "</span><b>Won</b><span>" + (me.won || 0) + "</span></div>" +
-        '<div class="stat"><span class="stat-bubble">' + I.clock + "</span><b>Lost</b><span>" + (me.lost || 0) + "</span></div>" +
+        '<div class="stat"><span class="stat-bubble">' + I.x + "</span><b>Lost</b><span>" + (me.lost || 0) + "</span></div>" +
         "</div></section>";
-      h += '<div class="spread mt16"><span class="section-title">Pending frame dues</span><input class="input" style="width:170px;min-height:44px" type="month" id="fr-month" value="' + esc(this.framesMonth) + '" aria-label="Filter by month" /></div>';
+      h += '<div class="mt16 frames-toolbar"><div class="section-title">Pending frame dues</div><div class="frames-month-row"><label class="month-picker"><span class="month-picker-icon" aria-hidden="true">' + I.cal + '</span><input type="month" id="fr-month" value="' + esc(this.framesMonth) + '" aria-label="Filter by month" /></label></div></div>';
       if (!dues.length) h += emptyBlock(I.check, "No frames found for this month", "No pending frame dues in " + esc(this.framesMonth) + ".", "");
       else {
         h += '<div class="rows mt8">' + dues.map(function (f) {
@@ -1201,7 +1240,7 @@
         (m.tableDiscountPercent ? '<div class="kv"><span>Table discount</span><b>' + esc(m.tableDiscountPercent) + "%</b></div>" : "") +
         '<div class="kv"><span>Wallet</span><b>' + money(m.walletBalance) + "</b></div>" +
         '<div class="kv"><span>Due</span><b>' + money(m.dueAmount) + "</b></div></section>";
-      h += '<div class="btn-row mt16"><button class="btn ghost" id="p-orders">' + I.receipt + ' My Orders</button><button class="btn ghost" id="p-frames">' + I.trophy + ' Frames</button></div>';
+      h += '<div class="btn-row mt16"><button class="btn ghost block" id="p-frames">' + I.trophy + ' Frames</button></div>';
       h += '<div class="mt12"><button class="btn danger" id="p-logout">' + I.logout + ' Log Out</button></div>';
       h += '<p class="foot">Member id ' + esc(Store.memberId) + "</p>";
       var host = $("#profile-body");
@@ -1209,7 +1248,6 @@
       $("#p-edit").addEventListener("click", Views.editProfileSheet);
       $("#p-clubs").addEventListener("click", function () { Router.go("clubs"); });
       $("#p-settings").addEventListener("click", function () { Router.go("settings"); });
-      $("#p-orders").addEventListener("click", function () { Router.go("orders"); });
       $("#p-frames").addEventListener("click", function () { Router.go("frames"); });
       $("#p-logout").addEventListener("click", function () { Auth.logout(false); toast("Signed out. See you at the Den!"); });
     },
@@ -1240,7 +1278,6 @@
 
     /* ---------- SETTINGS ---------- */
     settings: function () {
-      var theme = document.documentElement.getAttribute("data-theme") || "light";
       var u = Store.user || {};
       var isiOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
       var isStandalone = false;
@@ -1250,8 +1287,7 @@
       else if (isiOS && !isStandalone) installHtml = '<div class="card soft mt8 small">Install on iPhone: tap <b>Share \u2192 Add to Home Screen</b>.</div>';
       else if (!isStandalone) installHtml = '<div class="card soft mt8 small">Install from the browser menu (\u22EE \u2192 <b>Install app</b>) for the full-screen experience.</div>';
       var h = '<div class="spread"><span class="section-title">Appearance</span></div>' +
-        '<div class="theme-row mt8"><button class="theme-pick' + (theme === "light" ? " sel" : "") + '" data-theme-pick="light">' + I.sun + ' Light</button>' +
-        '<button class="theme-pick' + (theme === "dark" ? " sel" : "") + '" data-theme-pick="dark">' + I.moon + ' Dark</button></div>' + installHtml +
+        '<div class="theme-row mt8"><div class="theme-pick sel">' + I.sun + ' Light</div></div>' + installHtml +
         '<div class="spread mt16"><span class="section-title">Account</span></div>' +
         '<section class="card mt8"><div class="kv"><span>Signed in as</span><b>' + esc(u.email || member().email || "") + "</b></div>" +
         '<div class="kv"><span>Club</span><b>' + esc(club().name || "") + "</b></div>" +
@@ -1262,12 +1298,6 @@
         '<p class="foot">Rowdy\'s Den Members · v1.0 · ' + esc(API_BASE) + "</p>";
       var host = $("#settings-body");
       host.innerHTML = h;
-      $all("[data-theme-pick]", host).forEach(function (b) {
-        b.addEventListener("click", function () {
-          setTheme(b.getAttribute("data-theme-pick"));
-          Views.settings();
-        });
-      });
       var instBtn = $("#s-install");
       if (instBtn) instBtn.addEventListener("click", async function () {
         if (!PWA.deferred) return;
@@ -1284,16 +1314,16 @@
   function activityRow(a, compact) {
     var tag = a.tag || "", type = a.type || "";
     var icon = I.receipt, tone = "";
-    if (type === "frames") { icon = I.zap; tone = "gold"; }
+    if (type === "frames") { icon = I.zap; tone = a.due ? "red" : "gold"; }
     else if (type === "items") { icon = I.food; tone = "blue"; }
     else if (type === "memberships") { icon = I.trophy; tone = "lav"; }
     else if (type === "due") { icon = I.cash; tone = "green"; }
     else if (tag === "PAYMENT") { icon = I.wallet; tone = "green"; }
     else if (tag === "WARNING") { icon = I.alert; tone = "red"; }
-    var amt = a.amount != null ? '<span class="amt">' + money(a.amount) + "</span>" : "";
+    var amt = a.amount != null ? '<span class="amt' + (a.due ? " neg" : "") + '">' + money(a.amount) + "</span>" : "";
     return '<div class="lrow"><span class="lic ' + tone + '">' + icon + '</span><span class="grow">' +
       "<b class='t'>" + esc(a.message || type || tag || "Activity") + "</b>" +
-      '<span class="s">' + esc(fmtDateTime(a.createdAt)) + (a.mode ? " · " + esc(a.mode) : "") + (a.actorName ? " · " + esc(a.actorName) : "") + "</span></span>" + amt + "</div>";
+      '<span class="s">' + esc(fmtDateTime(a.createdAt)) + (a.mode ? " · " + esc(a.mode) : "") + "</span></span>" + amt + "</div>";
   }
 
   /* ---------------- slot bookings ---------------- */
@@ -1389,8 +1419,8 @@
   setInterval(function () { tickClock(document); }, 1000);
 
   function setTheme(t) {
-    document.documentElement.setAttribute("data-theme", t);
-    try { localStorage.setItem(LS.theme, t); } catch (e) {}
+    document.documentElement.setAttribute("data-theme", "light");
+    try { localStorage.removeItem(LS.theme); } catch (e) {}
   }
 
   /* ---------------- PWA install ---------------- */
@@ -1409,8 +1439,7 @@
   /* ---------------- boot ---------------- */
   async function boot() {
     try {
-      var savedTheme = localStorage.getItem(LS.theme);
-      if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
+      setTheme("light");
     } catch (e) {}
 
     $("#scrim").addEventListener("click", Sheet.close);

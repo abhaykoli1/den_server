@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from .. import db as db_mod
 from ..auth import current_user, is_master
 from ..config import settings
-from ..models import ClubIn, ClubPatchIn, ClubSettingsIn
+from ..models import ClubIn, ClubPatchIn, ClubSettingsIn, ClubStatusIn
 from ..services import (alias_player_ids, bill_web_aliases, billing_gate,
                         club_stats, frame_web_aliases, get_club, public_member,
                         sweep_expired_memberships)
@@ -115,6 +115,22 @@ async def patch_settings(club_id: str, payload: ClubSettingsIn,
     for key, val in ops.items():
         parts = key.split(".")
         club["settings"][parts[1]] = val
+    club.pop("_id", None)
+    return club
+
+
+@router.patch("/{club_id}/status")
+async def patch_status(club_id: str, payload: ClubStatusIn,
+                       user: dict = Depends(current_user)):
+    club = await get_club(user, club_id)
+    if user.get("role") == "staff":
+        raise HTTPException(403, "Only the owner can change club status")
+    db = await db_mod.get_db()
+    await db.clubs.update_one(
+        {"id": club_id},
+        {"$set": {"settings.isOpen": payload.isOpen}},
+    )
+    club.setdefault("settings", {})["isOpen"] = payload.isOpen
     club.pop("_id", None)
     return club
 

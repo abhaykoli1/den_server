@@ -62,13 +62,16 @@
               <span class="dot" id="bell-dot" hidden></span>
             </button>
           </div>
-          <h1 class="page-title mt16">Play at the Den</h1>
-          <form class="searchbar" id="home-search-form" role="search">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            <input id="home-search" type="search" placeholder="Search food, tables…" aria-label="Search food and tables" autocomplete="off" />
-            <button type="submit" class="plain" aria-label="Search">
+          <div class="home-title-row mt16">
+            <h1 class="page-title">Play at the Den</h1>
+            <span class="club-status-badge" id="club-status-badge">OPEN</span>
+          </div>
+          <form class="searchba" id="home-search-form" role="search">
+            <!-- <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg> -->
+            <!-- <input id="home-search" type="search" placeholder="Search food, tables…" aria-label="Search food and tables" autocomplete="off" /> -->
+            <!-- <button type="submit" class="plain" aria-label="Search">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.4"/><circle cx="10" cy="17" r="2.4"/></svg>
-            </button>
+            </button> -->
           </form>
           <div id="home-body"></div>
         </section>
@@ -126,6 +129,7 @@
         <!-- ACTIVITY -->
         <section class="view" id="v-activity" aria-label="Activity">
           <div class="page-head"><span style="width:44px"></span><h1>Activity</h1></div>
+          <div id="activity-due-summary"></div>
           <div class="chips" id="activity-chips" aria-label="Activity filters"></div>
           <div class="rows mt8" id="activity-list"></div>
           <div class="center mt12"><button class="link-btn" id="activity-more" hidden>Show more</button></div>

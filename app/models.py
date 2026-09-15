@@ -44,6 +44,11 @@ class ClubSettingsIn(In):
     dueLimit: Optional[float] = Field(default=None, ge=0, le=1000000)
     defaultAdvance: Optional[float] = Field(default=None, ge=0, le=100000)
     monthlyTableDiscount: Optional[float] = Field(default=None, ge=0, le=100)
+    isOpen: Optional[bool] = None
+
+
+class ClubStatusIn(In):
+    isOpen: bool
 
 
 # --------------------------------------------------------------------- tables
@@ -454,7 +459,7 @@ class ResultIn(In):
     score2: int = Field(ge=0, le=200)
     winnerPid: Optional[str] = None
     winner: Optional[Literal["1", "2"]] = None  # web alias: slot number → route resolves pid
-    mode: Literal["cash", "upi", "card"] = "cash"
+    mode: Literal["cash", "upi", "due"] = "cash"
 
 
 # ------------------------------------------------------------------- master

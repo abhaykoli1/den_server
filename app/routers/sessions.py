@@ -492,6 +492,12 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
             raise HTTPException(400, "A player member no longer exists — cancel and restart")
     calc = compute_bill(s, club, members_map, losers, winners,
                         payload.discount, payload.cashPaid, payload.usePass)
+    # `paymentMode` is the UI-facing field and `mode` is the legacy field.
+    # Always use the selected UI mode for ledger entries, even when an older
+    # client sends both fields with different values.
+    payment_mode = (payload.paymentMode or payload.mode).strip().lower()
+    if payment_mode not in ("cash", "upi", "card"):
+        payment_mode = payload.mode
 
     # --- atomic lock (lock-time doc is the billing source) ----------------
     locked = await db.sessions.find_one_and_update(
@@ -541,7 +547,7 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
 
     # --- payment log (only the now-collected portion; advance was logged) ---
     if calc["collectedNow"] > 0:
-        await payment_log(club["id"], "frames", calc["collectedNow"], payload.mode,
+        await payment_log(club["id"], "frames", calc["collectedNow"], payment_mode,
                           f"Frame · {s.get('tableName', '')} · ₹{fmt(calc['collectedNow'])}",
                           actor=user.get("name", ""), ref_type="frame",
                           ref_id=frame_id)
@@ -551,7 +557,7 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
             f"{members_map[mid]['name']} ₹{fmt(amt)}"
             for mid, amt in (calc.get("oldDuePaid") or {}).items()
             if mid in members_map and amt > 0)
-        await payment_log(club["id"], "due", calc["oldDueNow"], payload.mode,
+        await payment_log(club["id"], "due", calc["oldDueNow"], payment_mode,
                           f"Due collected with frame · {s.get('tableName', '')} · {names}",
                           actor=user.get("name", ""), ref_type="frame",
                           ref_id=frame_id)
@@ -590,8 +596,8 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
     # web FrameRecord ka poora alias set — write-time (legacy ke liye read-time
     # backfill services.frame_web_aliases karta hai)
     frame.update(calc_web_aliases(calc, winners, losers,
-                                  mode=payload.mode,
-                                  requested=payload.paymentMode or payload.mode))
+                                  mode=payment_mode,
+                                  requested=payment_mode))
     await db.frames.insert_one(frame)
     frame.pop("_id", None)
     await write_log(club["id"], "BILLING",
