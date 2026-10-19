@@ -145,6 +145,55 @@ async def member_payment(club_id: str, member_id: str, payload: MemberPaymentIn,
         {"id": member_id}, {"$inc": {"dueAmount": -amount},
                             "$set": {"updatedAt": now_iso()}})
     left = money(member.get("dueAmount") or 0)
+    if left == 0 and member.get("dueAmount") != 0:
+        await db.members.update_one(
+            {"id": member_id, "clubId": club["id"]},
+            {"$set": {"dueAmount": 0.0, "updatedAt": now_iso()}},
+        )
+        member["dueAmount"] = 0.0
+    frames = await db.frames.find(
+        {"clubId": club["id"]}, sort=[("createdAt", 1)]).to_list(None)
+    frame_due = money(sum(
+        money(line.get("duePart") or 0)
+        for frame in frames
+        for line in (frame.get("settlements") or [])
+        if line.get("memberId") == member_id
+    ))
+    unlinked_due = max(0.0, money(due - frame_due))
+    remaining = money(max(0.0, amount - unlinked_due))
+    for frame in frames:
+        if remaining <= 0:
+            break
+        settlements = frame.get("settlements") or []
+        allocated = 0.0
+        for line in settlements:
+            if line.get("memberId") != member_id:
+                continue
+            due_part = money(line.get("duePart") or 0)
+            if due_part <= 0:
+                continue
+            paid = money(min(remaining, due_part))
+            line["duePart"] = money(due_part - paid)
+            line["externalPaidPart"] = money((line.get("externalPaidPart") or 0) + paid)
+            remaining = money(remaining - paid)
+            allocated = money(allocated + paid)
+            if remaining <= 0:
+                break
+        if allocated <= 0:
+            continue
+        due_left = money(sum(money(line.get("duePart") or 0) for line in settlements))
+        paid_total = money((frame.get("paidAmount") or 0) + allocated)
+        await db.frames.update_one(
+            {"id": frame["id"], "clubId": club["id"]},
+            {"$set": {
+                "settlements": settlements,
+                "dueAmount": due_left,
+                "paidAmount": paid_total,
+                "status": "paid" if due_left <= 0 else ("partial" if paid_total > 0 else "unpaid"),
+                "cashCollected": money((frame.get("cashCollected") or 0) + allocated),
+                "updatedAt": now_iso(),
+            }},
+        )
     await payment_log(club["id"], "due", amount, payload.mode,
                       f"Due collected · {member['name']} · ₹{fmt(amount)}" +
                       ("" if left == 0 else f" · ₹{fmt(left)} left"),

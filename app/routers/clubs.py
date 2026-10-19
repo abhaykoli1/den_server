@@ -8,7 +8,7 @@ from ..models import ClubIn, ClubPatchIn, ClubSettingsIn, ClubStatusIn
 from ..services import (alias_player_ids, bill_web_aliases, billing_gate,
                         club_stats, frame_web_aliases, get_club, public_member,
                         sweep_expired_memberships)
-from ..util import now_iso, uid
+from ..util import menu_category_icon, now_iso, uid
 
 router = APIRouter(prefix="/clubs", tags=["clubs"])
 
@@ -32,12 +32,12 @@ async def list_clubs(user: dict = Depends(current_user)):
 @router.post("", status_code=201)
 async def create_club(payload: ClubIn, user: dict = Depends(current_user)):
     db = await db_mod.get_db()
-    if user["id"] == "local-admin":
+    if user.get("role") == "staff":
+        raise HTTPException(403, "Staff accounts can't create clubs")
+    if user["id"] == "local-admin" or is_master(user):
         limit_ok = True
     else:
         sub = user.get("subscription") or {}
-        if user.get("role") == "staff":
-            raise HTTPException(403, "Staff accounts can't create clubs")
         from ..services import subscription_is_active
         if not subscription_is_active(sub):
             raise HTTPException(402, "Subscription required — choose a plan first")
@@ -157,6 +157,9 @@ async def club_data(club_id: str, user: dict = Depends(current_user)):
     sessions = await db.sessions.find({"clubId": cid}).to_list(None)
     frames = await db.frames.find({"clubId": cid}, sort=[("createdAt", -1)]).to_list(200)
     menu_items = await db.menu_items.find({"clubId": cid}).to_list(None)
+    for item in menu_items:
+        item["categoryIcon"] = menu_category_icon(
+            item.get("category", "Cafe"), item.get("categoryIcon"))
     menu_items.sort(key=lambda i: (i.get("category", ""), i.get("name", "")))
     item_bills = await db.item_bills.find({"clubId": cid}, sort=[("createdAt", -1)]).to_list(200)
     expenses = await db.expenses.find({"clubId": cid}, sort=[("date", -1)]).to_list(200)

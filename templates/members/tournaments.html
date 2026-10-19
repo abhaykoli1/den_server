@@ -1,0 +1,51 @@
+{% extends "members/base.html" %}
+{% set back = '/members/more' %}
+{% block title %}Events{% endblock %}
+{% block heading %}Events{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <div class="seg mt12" data-tabs="tour" data-url>
+    <button class="{{ 'on' if tab != 'past' }}" data-tab="upcoming">Upcoming & live</button><button class="{{ 'on' if tab == 'past' }}" data-tab="past">Results</button>
+  </div>
+  <div class="mt16" data-panel="tour" data-name="upcoming" hidden>
+    {% for t in upcoming %}
+    <div class="card solid {{ 'mt12' if not loop.first }}">
+      <div class="row between start">
+        <div class="grow"><div class="h3">{{ t.name }}</div><div class="small muted mt4">{{ t.date }} · {{ t.game }} · {{ t.format }}</div></div>
+        {% if t.status == 'running' %}<span class="badge live">LIVE</span>{% elif t.registered %}<span class="badge ok">You're in</span>{% elif t.spotsLeft == 0 %}<span class="badge bad">Full</span>{% else %}<span class="badge brand">{{ t.spotsLeft }} spots</span>{% endif %}
+      </div>
+      <div class="stats three mt12">
+        <div class="stat"><div class="v">{{ t.entryFee|inr if t.entryFee else 'Free' }}</div><div class="k">entry</div></div>
+        <div class="stat"><div class="v">{{ t.prize1|inr }}</div><div class="k">1st prize</div></div>
+        <div class="stat"><div class="v">{{ t.playerCount }}/{{ t.maxPlayers }}</div><div class="k">players</div></div>
+      </div>
+      {% if t.notes %}<p class="small muted mt12">{{ t.notes }}</p>{% endif %}
+      {% if t.players %}<div class="row mt12"><span class="avatar-stack">{% for p in t.players[:6] %}{{ m.avatar(p.name, 'sm') }}{% endfor %}</span><span class="xs muted">{{ t.players|map(attribute='name')|map('truncate', 12, True, '')|join(', ')|truncate(60) }}</span></div>{% endif %}
+      {% if t.status == 'running' %}
+        <div class="mt12"><div class="progress"><i style="width:{{ (100 * t.matchesDone / (t.matchesTotal or 1))|round|int }}%"></i></div><div class="xs muted mt4">{{ t.matchesDone }}/{{ t.matchesTotal }} matches done</div></div>
+        {% for mt in t.liveMatches %}<div class="match mt8"><span class="badge live">on {{ mt.tableName or 'table' }}</span><span class="grow">{{ mt.p1 }} <span class="vs">VS</span> {{ mt.p2 }}</span></div>{% endfor %}
+        {% for mt in t.myMatches %}<div class="match mt8"><span class="grow">{{ mt.p1 }} <span class="vs">VS</span> {{ mt.p2 }}</span><span class="badge {{ 'ok' if mt.won else '' }}">{{ 'won' if mt.won else mt.status }}</span></div>{% endfor %}
+      {% else %}
+        <div class="row mt12 gap8">
+          {% if t.registered %}
+            {% if not t.paidEntry and t.entryFee %}<span class="badge warn">Entry fee due at counter</span>{% endif %}
+            <button class="btn sm ghost" data-leave="{{ t.id }}">Withdraw</button>
+          {% elif t.spotsLeft > 0 %}
+            <button class="btn sm" data-join="{{ t.id }}" data-fee="{{ t.entryFee }}" data-name="{{ t.name }}">Register{% if t.entryFee %} · {{ t.entryFee|inr }}{% endif %}</button>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+    {% else %}{{ m.empty('🏆', 'No events scheduled', 'The club will post the next tournament here.') }}{% endfor %}
+  </div>
+  <div class="mt16" data-panel="tour" data-name="past" hidden>
+    {% for t in past %}
+    <div class="card solid {{ 'mt12' if not loop.first }}">
+      <div class="row between"><div><div class="h3">{{ t.name }}</div><div class="small muted">{{ t.date }} · {{ t.game }} · {{ t.playerCount }} players</div></div>{% if t.registered %}<span class="badge">played</span>{% endif %}</div>
+      {% if t.winnerName %}<div class="row mt12 gap12"><span class="badge" style="background:#f0d78a;color:#4d3a08">🥇 {{ t.winnerName }}</span>{% if t.runnerUpName %}<span class="badge">🥈 {{ t.runnerUpName }}</span>{% endif %}</div>{% endif %}
+      {% for mt in t.myMatches %}<div class="match mt8"><span class="grow">{{ mt.p1 }} <span class="vs">VS</span> {{ mt.p2 }}</span><span class="badge {{ 'ok' if mt.won else 'bad' }}">{{ 'won' if mt.won else 'lost' }}</span></div>{% endfor %}
+    </div>
+    {% else %}{{ m.empty('📜', 'No past events yet') }}{% endfor %}
+  </div>
+</div>
+{% endblock %}

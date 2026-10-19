@@ -6,6 +6,7 @@ played frames through the existing sessions/frames flow.
 """
 import re
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -35,10 +36,10 @@ class BookingIn(In):
     end: str                       # HH:MM 24h IST
     players: int = 2
     notes: str = ""
-    memberId: str | None = None    # owner/staff booking on someone's behalf
+    memberId: Optional[str] = None    # owner/staff booking on someone's behalf
 
 
-def _member_id(user: dict) -> str | None:
+def _member_id(user: dict) -> Optional[str]:
     return user.get("memberId") or (user.get("id") if user.get("role") == "member" else None)
 
 
@@ -74,7 +75,7 @@ async def _sweep(db, club_id: str):
 async def list_bookings(club_id: str, mine: bool = False, table_id: str = "",
                         user: dict = Depends(current_user)):
     """Members always see only their own bookings; owner/staff see the club's."""
-    club = await get_club(user, club_id)
+    club = await get_club(user, club_id, allow_member=True)
     db = await db_mod.get_db()
     await _sweep(db, club["id"])
     query: dict = {"clubId": club["id"]}
@@ -93,7 +94,7 @@ async def list_bookings(club_id: str, mine: bool = False, table_id: str = "",
 @router.post("", status_code=201)
 async def create_booking(club_id: str, payload: BookingIn,
                          user: dict = Depends(current_user)):
-    club = await get_club(user, club_id)
+    club = await get_club(user, club_id, allow_member=True)
     db = await db_mod.get_db()
     role = user.get("role")
     if role == "member":
@@ -170,7 +171,7 @@ async def create_booking(club_id: str, payload: BookingIn,
 @router.delete("/{booking_id}")
 async def cancel_booking(club_id: str, booking_id: str,
                          user: dict = Depends(current_user)):
-    club = await get_club(user, club_id)
+    club = await get_club(user, club_id, allow_member=True)
     db = await db_mod.get_db()
     booking = await db.bookings.find_one({"id": booking_id, "clubId": club["id"]})
     if not booking:

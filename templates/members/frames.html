@@ -1,0 +1,54 @@
+{% extends "members/base.html" %}
+{% set back = '/members/more' %}
+{% block title %}My frames{% endblock %}
+{% block heading %}My frames{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <div class="stats mt12">
+    <div class="stat"><div class="v">{{ stats.played }}</div><div class="k">played</div></div>
+    <div class="stat"><div class="v ok">{{ stats.won }}</div><div class="k">won</div></div>
+    <div class="stat"><div class="v">{{ stats.winRate }}%</div><div class="k">win rate</div></div>
+    <div class="stat"><div class="v">{{ stats.streak }}{{ stats.streakKind or '' }}</div><div class="k">streak</div></div>
+  </div>
+  <div class="card mt12 row between">
+    <div><div class="xs muted">Table time</div><div class="b">{{ stats.hours }} hrs</div></div>
+    <div><div class="xs muted">Favourite</div><div class="b">{{ stats.favouriteTable or '—' }}</div></div>
+    <div><div class="xs muted">Spent</div><div class="b">{{ stats.spent|inr }}</div></div>
+    <div><div class="xs muted">Bonus</div><div class="b ok">+{{ stats.bonus|inr }}</div></div>
+  </div>
+  <div class="seg mt16" data-tabs="frames" data-url>
+    <button class="{{ 'on' if tab == 'all' }}" data-tab="all">All</button><button class="{{ 'on' if tab == 'won' }}" data-tab="won">Won</button><button class="{{ 'on' if tab == 'lost' }}" data-tab="lost">Lost</button><button class="{{ 'on' if tab == 'due' }}" data-tab="due">Unpaid</button>
+  </div>
+  {% for name in ['all', 'won', 'lost', 'due'] %}
+  <div class="mt16" data-panel="frames" data-name="{{ name }}" hidden>
+    {% set ns = namespace(any=False) %}
+    {% for month, list in groups.items() %}
+      {% set rows = list if name == 'all' else (list|selectattr('won')|list if name == 'won' else (list|rejectattr('won')|list if name == 'lost' else list|selectattr('myDue','>',0)|list)) %}
+      {% if rows %}{% set ns.any = True %}
+        <div class="month-head">{{ month }}</div>
+        <div class="list">
+        {% for f in rows %}
+          <details class="card solid tight" style="padding:0">
+            <summary style="list-style:none;cursor:pointer">{{ m.frame_row(f)|replace('class="lrow"', 'class="lrow" style="box-shadow:none"') }}</summary>
+            <div style="padding:0 14px 14px">
+              <div class="divider" style="margin-top:0"></div>
+              <div class="kv"><span class="k">Players</span><span class="v">{% for p in f.players %}{{ 'You' if p.me else p.label }}{{ ' 🏆' if p.isWinner }}{{ ', ' if not loop.last }}{% endfor %}</span></div>
+              <div class="kv"><span class="k">When</span><span class="v">{{ f.startedAt|dt }} · {{ f.durationMinutes|duration }}{% if f.peak %} · peak{% endif %}</span></div>
+              <div class="kv"><span class="k">Table time</span><span class="v">{{ f.tableAmount|inr }}</span></div>
+              {% if f['items'] %}<div class="kv"><span class="k">Cafe</span><span class="v">{% for i in f['items'] %}{{ i.qty }}× {{ i.name }}{{ ', ' if not loop.last }}{% endfor %} · {{ f.itemsAmount|inr }}</span></div>{% endif %}
+              {% if f.won %}<div class="kv"><span class="k">Result</span><span class="v ok">Won · +{{ f.bonus|inr }} bonus credited</span></div>
+              {% else %}
+                <div class="kv"><span class="k">Your share</span><span class="v">{{ f.myCharge|inr }}{% if f.myDiscount %} <span class="ok">(−{{ f.myDiscount|inr }} member)</span>{% endif %}</span></div>
+                <div class="kv"><span class="k">Paid by</span><span class="v">{% for p in f.myParts %}{{ p.label }} {{ p.amount|inr }}{{ ' + ' if not loop.last }}{% else %}—{% endfor %}</span></div>
+              {% endif %}
+            </div>
+          </details>
+        {% endfor %}
+        </div>
+      {% endif %}
+    {% endfor %}
+    {% if not ns.any %}{{ m.empty('🎱', 'No frames here', 'Book a table and get on the baize.') }}{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

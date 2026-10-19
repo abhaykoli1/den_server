@@ -1,0 +1,58 @@
+{% extends "members/base.html" %}
+{% block title %}More{% endblock %}
+{% block topbar %}
+<header class="topbar">
+  <a href="/members/profile" class="row grow">{{ m.avatar(member.name, 'lg') }}<div class="grow"><div class="h2">{{ member.name }}</div><div class="small muted">{{ membership.planName or 'Pay as you play' }}{% if member.badge %} · {{ member.badge }}{% endif %} · member since {{ member.createdAt|dt('date') }}</div></div>{{ m.icon('chev') }}</a>
+</header>
+{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <div class="stats mt16">
+    <a class="stat" href="/members/wallet"><div class="v">{{ member.walletBalance|inr }}</div><div class="k">wallet</div></a>
+    <a class="stat" href="/members/wallet?tab=dues"><div class="v {{ 'bad' if member.dueAmount > 0 }}">{{ member.dueAmount|inr }}</div><div class="k">due</div></a>
+    <a class="stat" href="/members/frames"><div class="v">{{ stats.won }}/{{ stats.played }}</div><div class="k">won</div></a>
+    <a class="stat" href="/members/membership"><div class="v">{{ member.passFramesLeft if member.passFramesLeft else (membership.tableDiscountPercent ~ '%' if membership.tableDiscountPercent else '—') }}</div><div class="k">{{ 'frames left' if member.passFramesLeft else 'discount' }}</div></a>
+  </div>
+
+  {% set links = [
+    ('/members/wallet', 'wallet', 'Wallet & dues', 'Balance, history, top-up'),
+    ('/members/orders', 'receipt', 'Orders & bills', 'Cafe & store purchases'),
+    ('/members/frames', 'table', 'My frames', stats.played ~ ' played · ' ~ stats.winRate ~ '% wins'),
+    ('/members/rankings', 'trophy', 'Club rankings', 'Where you stand this quarter'),
+    ('/members/tournaments', 'star', 'Events', 'Tournaments & registration'),
+    ('/members/membership', 'ticket', 'Membership', membership.planName or 'Choose a plan'),
+    ('/members/tables', 'clock', 'Live tables', tables_count ~ ' tables · rates'),
+    ('/members/activity', 'activity', 'Activity', (unread ~ ' new') if unread else 'All caught up'),
+  ] %}
+  <div class="list mt16">
+  {% for href, ic, t, s in links %}
+    <a class="lrow" href="{{ href }}"><div class="ico">{{ m.icon(ic) }}</div><div class="grow"><div class="t">{{ t }}</div><div class="s">{{ s }}</div></div>{% if ic == 'activity' and unread %}<span class="badge live">{{ unread }}</span>{% endif %}<span class="chev">{{ m.icon('chev') }}</span></a>
+  {% endfor %}
+  </div>
+
+  <div class="card mt16">
+    <div class="h4">{{ club.name }}</div>
+    <div class="small muted mt4">{{ club.hours }}{% if club.address %} · {{ club.address }}{% endif %}</div>
+    <div class="row mt12 gap8 wrap">
+      {% if club.phone %}<a class="btn sm light" href="tel:{{ club.phone|replace(' ', '') }}">{{ m.icon('phone') }} Call</a>{% endif %}
+      {% if club.address %}<a class="btn sm light" href="https://maps.google.com/?q={{ (club.name ~ ' ' ~ club.address)|urlencode }}" target="_blank" rel="noopener">{{ m.icon('pin') }} Directions</a>{% endif %}
+      <button class="btn sm light" data-install hidden>{{ m.icon('download') }} Install app</button>
+    </div>
+  </div>
+
+  <div class="card mt12 row between">
+    <div class="row">{{ m.icon('moon') }}<span class="b">Dark mode</span></div>
+    <button class="btn xs soft" data-theme-toggle><span data-theme-label>{{ 'On' if theme == 'dark' else 'Off' }}</span></button>
+  </div>
+
+  {% if memberships|length > 1 %}
+  <div class="card mt12">
+    <div class="h4">Your clubs</div>
+    {% for c in memberships %}<div class="row between mt8"><span class="small">{{ c.clubName }}</span>{% if c.current %}<span class="badge ok">current</span>{% else %}<button class="btn xs soft" data-switch-club="{{ c.clubId }}">Switch</button>{% endif %}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <a class="btn ghost mt16" href="/members/logout">{{ m.icon('logout') }} Sign out</a>
+  <p class="center xs faint mt16">Members app v{{ APP_VERSION }} · signed in as {{ email }}</p>
+</div>
+{% endblock %}

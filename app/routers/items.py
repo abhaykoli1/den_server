@@ -9,7 +9,8 @@ from ..models import (ItemBillIn, ItemBillPatchIn, MarkPaidIn, MenuItemIn,
                       MenuItemPatchIn, RestockIn)
 from ..services import (bill_web_aliases, billing_gate, get_club, payment_log,
                         write_log)
-from ..util import fmt, money, now_iso, today_ist, uid
+from ..util import (default_menu_category_icon, fmt, menu_category_icon, money,
+                    now_iso, today_ist, uid)
 
 router = APIRouter(prefix="/clubs/{club_id}", tags=["items"])
 
@@ -20,6 +21,9 @@ async def list_items(club_id: str, user: dict = Depends(current_user)):
     club = await get_club(user, club_id)
     db = await db_mod.get_db()
     items = await db.menu_items.find({"clubId": club["id"]}).to_list(None)
+    for item in items:
+        item["categoryIcon"] = menu_category_icon(
+            item.get("category", "Cafe"), item.get("categoryIcon"))
     items.sort(key=lambda i: (i.get("category", ""), i.get("name", "")))
     return items
 
@@ -33,6 +37,7 @@ async def create_item(club_id: str, payload: MenuItemIn, user: dict = Depends(cu
         "id": uid("it"), "clubId": club["id"], "name": payload.name.strip(),
         "image": payload.image or "",
         "category": payload.category.strip() or "Cafe", "price": money(payload.price),
+        "categoryIcon": payload.categoryIcon or default_menu_category_icon(payload.category or "Cafe"),
         "costPrice": money(payload.costPrice), "stockQty": payload.stockQty,
         "unit": payload.unit.strip() or "pc", "reorderLevel": payload.reorderLevel,
         "active": True, "createdAt": now_iso(),
@@ -63,9 +68,12 @@ async def patch_item(club_id: str, item_id: str, payload: MenuItemPatchIn,
                      user: dict = Depends(current_user)):
     club = await get_club(user, club_id)
     db = await db_mod.get_db()
-    ops = {k: v for k, v in payload.model_dump().items() if v is not None}
+    ops = payload.model_dump(exclude_unset=True)
     if "image" in ops and ops["image"] is None:
         ops["image"] = ""
+    ops = {k: v for k, v in ops.items() if v is not None}
+    if "category" in ops and "categoryIcon" not in ops:
+        ops["categoryIcon"] = default_menu_category_icon(ops["category"])
     for key in ("price", "costPrice"):
         if key in ops:
             ops[key] = money(ops[key])

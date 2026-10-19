@@ -1,0 +1,118 @@
+{% extends "members/base.html" %}
+{% block title %}Home{% endblock %}
+{% block topbar %}
+<header class="topbar">
+  <a href="/members/profile" aria-label="Profile">{{ m.avatar(member.name) }}</a>
+  <div class="grow">
+    <div class="xs muted">{{ home.greeting if home.greeting else 'Welcome back' }}</div>
+    <div class="h3 ellipsis">{{ member.name.split(' ')[0] }} · <span class="muted" style="font-weight:600">{{ club.name }}</span></div>
+  </div>
+  <span class="status-pill {{ '' if club.isOpen else 'closed' }}"><i></i>{{ 'Open' if club.isOpen else 'Closed' }}</span>
+  <a class="icon-btn" href="/members/activity" aria-label="Activity">{{ m.icon('bell') }}{% if unread %}<span class="dot"></span>{% endif %}</a>
+</header>
+{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <div class="h1 mt12">Let's play.</div>
+
+  <form class="search mt16" action="/members/shop" method="get" role="search">
+    {{ m.icon('search') }}<input name="q" placeholder="Search cafe & store" aria-label="Search cafe and store">
+  </form>
+
+  {# wallet / dues strip #}
+  <div class="wallet mt16">
+    <div class="row between">
+      <div>
+        <div class="lbl">Wallet balance</div>
+        <div class="amt">{{ member.walletBalance|inr }}</div>
+      </div>
+      <a class="icon-btn" href="/members/wallet" style="background:rgba(255,255,255,.14);border-color:transparent;color:#fff">{{ m.icon('chev') }}</a>
+    </div>
+    <div class="mini">
+      {% if member.dueAmount > 0 %}<span class="pill bad">Due {{ member.dueAmount|inr }}</span>{% else %}<span class="pill ok">No dues</span>{% endif %}
+      {% if member.passFramesLeft > 0 %}<span class="pill">🎟 {{ member.passFramesLeft }} frames left</span>{% endif %}
+      {% if member.membership.active and member.membership.planType == 'monthly' %}<span class="pill">{{ member.membership.tableDiscountPercent }}% off tables · {{ member.membership.daysLeft }}d</span>{% endif %}
+      {% if home.pendingRequests %}<span class="pill">⏳ {{ home.pendingRequests|length }} pending</span>{% endif %}
+    </div>
+    <div class="actions">
+      <a class="btn w" href="/members/wallet" data-topup data-offers='{{ [] | tojson_safe }}'>Top up</a>
+      {% if member.dueAmount > 0 %}<a class="btn g" href="/members/wallet?tab=dues">Clear dues</a>{% else %}<a class="btn g" href="/members/bookings?tab=new">Book a table</a>{% endif %}
+    </div>
+  </div>
+
+  {# category tiles #}
+  <div class="tiles mt16">
+    <a class="tile" href="/members/tables"><span class="n">{{ home.liveCount }} live</span>{{ m.icon('table') }}<span class="t">Tables</span></a>
+    <a class="tile" href="/members/cafe">{{ m.icon('cafe') }}<span class="t">Cafe</span></a>
+    <a class="tile" href="/members/shop">{{ m.icon('shop') }}<span class="t">Pro shop</span></a>
+    <a class="tile" href="/members/bookings?tab=new">{{ m.icon('calendar') }}<span class="t">Book</span></a>
+    <a class="tile" href="/members/frames"><span class="n">{{ home.stats.winRate }}% wins</span>{{ m.icon('trophy') }}<span class="t">My frames</span></a>
+    <a class="tile dark" href="/members/tournaments">{{ m.icon('star') }}<span class="t">Events</span></a>
+  </div>
+
+  {# next booking / live game #}
+  {% set mine = home.tables|selectattr('mine')|list %}
+  {% if mine %}
+  <a class="card dark mt16 row" href="/members/tables" data-live-tables>
+    <div class="grow"><div class="xs muted">You're on the table</div><div class="h3">{{ mine[0].name }} · <span class="mono" data-since="{{ mine[0].session.startedAt }}">00:00</span></div><div class="xs muted mt4">{{ mine[0].session.players|map(attribute='label')|join(' vs ') }}</div></div>
+    <span class="badge live">LIVE</span>
+  </a>
+  {% elif home.nextBooking %}
+  <a class="lrow mt16" href="/members/bookings/{{ home.nextBooking.id }}">
+    <div class="chipdate"><span class="m">{{ home.nextBooking.startAt|dt('chip_mon') }}</span><span class="d">{{ home.nextBooking.startAt|dt('chip_day') }}</span></div>
+    <div class="grow"><div class="xs muted">Next booking · {{ home.nextBooking.startAt|dt('rel') }}</div><div class="t">{{ home.nextBooking.tableName }} · {{ home.nextBooking.startIST|hm }}–{{ home.nextBooking.endIST|hm }}</div></div>
+    <span class="chev">{{ m.icon('chev') }}</span>
+  </a>
+  {% endif %}
+
+  {# live tables strip #}
+  <section class="section" data-live-tables>
+    <div class="section-head"><h2 class="h2">Tables now</h2><a class="see-all" href="/members/tables">See all</a></div>
+    <div class="hscroll">{% for t in home.tables %}{{ m.table_card(t) }}{% endfor %}</div>
+  </section>
+
+  {# hero #}
+  <section class="section">
+    <a class="hero dots" href="/members/shop?tab=new">
+      <img src="/members/static/members/demo/hero-club.jpg" alt="">
+      <span class="shade"></span>
+      <div class="txt"><div class="big">Discover<br>what's new</div><div class="sub">Fresh cues, tips & club merch in the pro shop</div><span class="cta">Shop new arrivals {{ m.icon('chev') }}</span></div>
+    </a>
+  </section>
+
+  {# popular / cafe / store segmented #}
+  <section class="section">
+    <div class="section-head"><h2 class="h2">Order in</h2><a class="see-all" href="/members/cart">Cart</a></div>
+    <div class="seg" data-tabs="home" data-home-seg><button class="on" data-tab="popular">Popular</button><button data-tab="cafe">Cafe</button><button data-tab="shop">Store</button></div>
+    <div class="grid2 mt12" data-home-grid>
+      {% for i in home.popular %}{{ m.product_card(i) }}{% endfor %}
+      {% for i in home.cafe %}{% if i not in home.popular %}{{ m.product_card(i) }}{% endif %}{% endfor %}
+      {% for i in home.shop %}{% if i not in home.popular %}{{ m.product_card(i) }}{% endif %}{% endfor %}
+    </div>
+  </section>
+
+  {# tournaments #}
+  {% if home.tournaments %}
+  <section class="section">
+    <div class="section-head"><h2 class="h2">Events</h2><a class="see-all" href="/members/tournaments">See all</a></div>
+    {% for t in home.tournaments %}
+    <a class="card solid row" href="/members/tournaments">
+      <div class="ico" style="width:46px;height:46px;border-radius:14px;background:var(--brand-soft);color:var(--brand);display:flex;align-items:center;justify-content:center;flex:0 0 auto">{{ m.icon('trophy') }}</div>
+      <div class="grow"><div class="b">{{ t.name }}</div><div class="xs muted">{{ t.date }} · {{ t.game }} · {{ t.playerCount }}/{{ t.maxPlayers }} players{% if t.entryFee %} · {{ t.entryFee|inr }} entry{% endif %}</div></div>
+      {% if t.status == 'running' %}<span class="badge live">LIVE</span>{% elif t.registered %}<span class="badge ok">You're in</span>{% else %}<span class="badge brand">Join</span>{% endif %}
+    </a>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {# recent activity summary #}
+  <section class="section">
+    <div class="section-head"><h2 class="h2">Recent</h2><a class="see-all" href="/members/frames">Frames</a></div>
+    <div class="list">
+      {% for f in home.recentFrames %}{{ m.frame_row(f) }}{% endfor %}
+      {% for o in home.recentOrders[:2] %}{{ m.order_row(o) }}{% endfor %}
+      {% if not home.recentFrames and not home.recentOrders %}{{ m.empty('🎱', 'No games yet', 'Your frames and orders will show up here.') }}{% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

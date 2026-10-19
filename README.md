@@ -17,26 +17,32 @@ MONGODB_URI="mongomock://demo" AUTH_DEV_MODE=true python3 run.py
 start-members-app.bat           # Windows
 ```
 
-## 📱 Members Web App
+## 📱 Members App (`/members`)
 
-The members web app is **now integrated** into this backend!
+The member-facing app ships inside this backend — Jinja2-rendered, mobile-first,
+installable as a PWA. One command starts everything:
 
-- **Access**: http://localhost:8000/members
-- **No separate server needed** — runs as part of den_server
-- **Configuration**: See [MEMBERS_WEB.md](./MEMBERS_WEB.md)
+```bash
+./start-members-app.sh            # macOS / Linux   (creates .venv, installs, seeds, runs)
+start-members-app.bat             # Windows
+./start-members-app.sh --fresh    # reset demo data · --prod uses MongoDB from .env
+```
 
-Key features:
-- ✅ Mobile-optimized (430px design)
-- ✅ Live tables with timers
-- ✅ Wallet & payment management
-- ✅ Food ordering
-- ✅ Activity feed
-- ✅ PWA installable
-- ✅ Light/dark theme
+Open **http://localhost:8000/members** · demo logins `ravi@example.com`
+(wallet ₹500, bookings, orders) · `arjun@example.com` (₹170 due, frame pass).
 
-Demo logins:
-- `ravi@example.com` (Wallet member)
-- `arjun@example.com` (Has dues)
+What members get: a premium warm cafe-style UI with live tables, timers & rates ·
+cafe + pro-shop (cues, tips, chalk, gloves, tees…) with cart → wallet / tab /
+UPI checkout · orders with kitchen status · wallet ledger, dues & top-ups ·
+frames history, stats, club rankings · table bookings (list, calendar, slot
+picker, ticket, .ics) · membership plans · tournaments · activity feed · dark
+mode · PWA install · real Google sign-in when configured.
+
+Owner side: `GET/POST /api/clubs/{id}/portal/*` to approve UPI top-ups /
+plan purchases and run the app-order kitchen queue. Full screens, API list and
+data model are in **[MEMBERS_WEB.md](./MEMBERS_WEB.md)**; trust boundaries and
+extension rules are in **[ARCHITECTURE.md](./ARCHITECTURE.md)**. Google setup is
+in **[GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md)**.
 
 ## Full Setup
 

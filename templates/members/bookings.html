@@ -1,0 +1,58 @@
+{% extends "members/base.html" %}
+{% block title %}Bookings{% endblock %}
+{% block heading %}Bookings{% endblock %}
+{% block topactions %}<a class="icon-btn" href="/members/bookings?tab=new" aria-label="New booking">{{ m.icon('plus') }}</a>{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <div class="seg mt12" data-tabs="bk" data-url>
+    <button class="{{ 'on' if tab == 'list' }}" data-tab="list">Upcoming</button><button class="{{ 'on' if tab == 'calendar' }}" data-tab="calendar">Calendar</button><button class="{{ 'on' if tab == 'new' }}" data-tab="new">Book</button>
+  </div>
+
+  {# ---- list #}
+  <div class="mt16" data-panel="bk" data-name="list" hidden>
+    {% if upcoming %}
+      <div class="list">{% for b in upcoming %}{{ m.booking_row(b) }}{% endfor %}</div>
+    {% else %}
+      <div class="card center"><div class="e" style="font-size:36px">📅</div><div class="b mt8">No upcoming bookings</div><p class="small muted mt4">Reserve a table up to {{ rules.maxDays }} days ahead.</p><button class="btn sm mt12" data-tab-go="new" onclick="document.querySelector('[data-tabs=bk] [data-tab=new]').click()">Book a table</button></div>
+    {% endif %}
+    {% if past %}
+      <div class="month-head">Past</div>
+      <div class="list">{% for b in past[:10] %}{{ m.booking_row(b) }}{% endfor %}</div>
+    {% endif %}
+  </div>
+
+  {# ---- calendar #}
+  <div class="mt16" data-panel="bk" data-name="calendar" hidden>
+    <div class="cal" data-cal data-today="{{ today }}" data-bookings='{{ bookings|tojson_safe }}'>
+      <div class="head">
+        <button class="navb" data-cal-prev aria-label="Previous month">{{ m.icon('back') }}</button>
+        <div class="center"><div class="m" data-cal-month></div><div class="y" data-cal-year></div></div>
+        <button class="navb" data-cal-next aria-label="Next month">{{ m.icon('chev') }}</button>
+      </div>
+      <div class="grid" data-cal-grid></div>
+    </div>
+    <div class="mt16" data-cal-list></div>
+  </div>
+
+  {# ---- new booking #}
+  <div class="mt16" data-panel="bk" data-name="new" hidden>
+    <div data-booking-form data-table="{{ preselect_table }}" data-date="{{ preselect_date }}" data-open="{{ rules.openHour }}" data-close-h="{{ rules.closeHour }}" data-close-m="{{ rules.closeMin }}">
+      <div class="h4 mb8">Table</div>
+      <div class="tpick" data-tables-scroll>
+        {% for t in tables %}<button type="button" class="tp" data-bt="{{ t.id }}" data-name="{{ t.name }}" data-rate="{{ t.hourlyRate }}"><div class="n">{{ t.name }}</div><div class="r">{{ t.game }} · {{ t.hourlyRate|inr }}/hr</div>{% if t.status == 'live' %}<span class="badge live mt8">in play</span>{% endif %}</button>{% endfor %}
+      </div>
+      <div class="h4 mt16 mb8">Day</div>
+      <div class="daystrip">{% for d in days %}<button type="button" class="dayc" data-bd="{{ d.iso }}"><div class="w">{{ d.label }}</div><div class="d">{{ d.day }}</div></button>{% endfor %}</div>
+      <div class="row between mt16 mb8"><span class="h4">Duration</span><span class="stepper sm" data-players><button type="button" data-dec aria-label="Fewer players">{{ m.icon('minus') }}</button><span class="q" data-q>2</span><button type="button" data-inc aria-label="More players">{{ m.icon('plus') }}</button><span class="xs muted">players</span></span></div>
+      <div class="chips" style="margin:0 -18px"><button type="button" class="chip" data-dur="30">30 min</button><button type="button" class="chip on" data-dur="60">1 hr</button><button type="button" class="chip" data-dur="90">1.5 hr</button><button type="button" class="chip" data-dur="120">2 hr</button></div>
+      <div class="h4 mt16 mb8">Start time</div>
+      <div class="slots" data-slots></div>
+      <div class="row gap8 mt8 xs muted"><span class="slot in" style="height:18px;width:18px;padding:0"></span> selected · <span class="slot mine" style="height:18px;width:18px;padding:0"></span> yours · <span class="slot busy" style="height:18px;width:18px;padding:0"></span> taken</div>
+      <input class="input mt16" data-bnotes placeholder="Note for the club (optional)" maxlength="200">
+      <div class="card solid mt16" data-bsum></div>
+      <button class="btn mt12" data-book data-busy="Booking…" disabled>Confirm booking</button>
+      <p class="hint center mt8">Free to reserve · table time is billed at the counter after your game · cancel anytime before the slot.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

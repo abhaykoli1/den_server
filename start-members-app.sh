@@ -1,55 +1,67 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# One-click start for the Rowdy's Den Members App (+ the full billing API).
+#
+#   ./start-members-app.sh            demo mode: in-memory Mongo + seeded club, no setup
+#   ./start-members-app.sh --fresh    wipe the demo data and reseed
+#   ./start-members-app.sh --prod     real MongoDB from .env (MONGODB_URI, JWT_SECRET, SMTP…)
+#
+# Opens http://localhost:8000/members  ·  demo logins: ravi@example.com · arjun@example.com
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
-# Quick start script for Rowdy's Den Members App
-# This script sets up and starts the members app integrated with den_server
+MODE="demo"; FRESH=0
+for a in "$@"; do
+  case "$a" in
+    --fresh) FRESH=1 ;;
+    --prod)  MODE="prod" ;;
+    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+  esac
+done
 
-set -e
+PY="${PYTHON:-python3}"
+command -v "$PY" >/dev/null 2>&1 || { echo "✗ python3 not found — install Python 3.10+ first"; exit 1; }
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
-
-echo "🚀 Rowdy's Den Members App — Integrated with den_server"
-echo "=================================================="
-
-# Check if Python 3 is available
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is not installed. Please install Python 3.8 or later."
-    exit 1
+# --- virtualenv + dependencies (created once, reused after) -----------------
+if [ ! -d ".venv" ]; then
+  echo "▸ creating virtualenv (.venv) …"
+  "$PY" -m venv .venv
+fi
+# shellcheck disable=SC1091
+source .venv/bin/activate
+if ! python -c "import fastapi, motor, mongomock, jinja2, multipart, jwt" >/dev/null 2>&1; then
+  echo "▸ installing dependencies …"
+  pip install -q --upgrade pip
+  pip install -q -r requirements.txt
 fi
 
-echo "✅ Python 3 found: $(python3 --version)"
+PORT="${PORT:-8000}"
 
-# Install requirements if needed
-if [ ! -d "venv" ]; then
-    echo ""
-    echo "📦 Installing dependencies..."
-    pip install -r requirements.txt
+if [ "$MODE" = "demo" ]; then
+  export MONGODB_URI="mongomock://demo" AUTH_DEV_MODE=true
+  [ "$FRESH" = 1 ] && { echo "▸ clearing demo data …"; rm -rf .devdata; }
+  if [ ! -f ".devdata/snapshot.json" ]; then
+    echo "▸ seeding demo club (Rowdy's Den · 3 tables · cafe + pro shop · members) …"
+    python scripts/seed_demo.py
+  fi
+else
+  [ -f ".env" ] || { echo "✗ --prod needs a .env with MONGODB_URI, JWT_SECRET (see README)"; exit 1; }
 fi
 
-# Setup demo data (optional)
-if [ "$1" = "--fresh" ]; then
-    echo ""
-    echo "🗑️  Clearing old demo data..."
-    rm -f .devdata/snapshot.json
+cat <<BANNER
+
+  🎱  Rowdy's Den — Members App
+  ─────────────────────────────────────────────
+  Members app   http://localhost:${PORT}/members
+  Billing API   http://localhost:${PORT}/api
+BANNER
+if [ "$MODE" = "demo" ]; then cat <<BANNER
+  Demo logins   ravi@example.com   (wallet ₹500 · bookings · orders)
+                arjun@example.com (due ₹170 · frame pass)
+  Owner login   owner@rowdys.dev  (POST /api/auth/dev — approve top-ups & orders)
+  Data lives in .devdata/snapshot.json — run with --fresh to reset.
+BANNER
 fi
-
-echo ""
-echo "🎬 Starting den_server..."
-echo "=================================================="
-echo ""
-echo "📱 Members app will be available at:"
-echo "   🌐 http://localhost:8000/members"
-echo ""
-echo "📊 API docs at:"
-echo "   🌐 http://localhost:8000/docs"
-echo ""
-echo "Test logins (AUTH_DEV_MODE=true):"
-echo "   📧 ravi@example.com"
-echo "   📧 arjun@example.com"
-echo ""
-echo "Press Ctrl+C to stop"
-echo "=================================================="
-echo ""
-
-# Start the server
-MONGODB_URI="mongomock://demo" AUTH_DEV_MODE=true PORT=8000 python3 run.py
+echo "  Ctrl+C stops the server"
+echo "  ─────────────────────────────────────────────"
+echo
+exec env PORT="$PORT" python run.py

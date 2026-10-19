@@ -66,7 +66,7 @@ def membership_pct(member: dict, club: dict) -> float:
 def pass_block_reason(member: dict):
     if (member.get("dueAmount") or 0) > 0:
         return "pending due"
-    if member.get("planType") != "pass" or _expired(member):
+    if _expired(member):
         return "no active frame pass"
     if (member.get("passFramesLeft") or 0) < 1:
         return "no frames left"
@@ -123,6 +123,9 @@ def compute_bill(session: dict, club: dict, members_map: dict, losers: list,
     g_sh = split_evenly(glove_amt, n)
 
     pass_set = set(use_pass or [])
+    payer_member_ids = {p.get("memberId") for p in losers if p.get("memberId")}
+    if pass_set - payer_member_ids:
+        raise HTTPException(400, "A frame pass can only be used by a paying member")
     advance = float(session.get("advancePaid", 0) or 0)
     cash_pool = money(advance + (cash_paid or 0))
 

@@ -1,0 +1,44 @@
+{% extends "members/base.html" %}
+{% block title %}Pro shop{% endblock %}
+{% block topbar %}
+<header class="topbar">
+  <a href="/members/profile">{{ m.avatar(member.name) }}</a>
+  <div class="grow"><div class="xs muted">Cues · tips · chalk · merch</div><div class="h3">Pro Shop</div></div>
+  <a class="icon-btn" href="/members/cart" aria-label="Cart">{{ m.icon('cart') }}<span class="badge" data-cart-count hidden>0</span></a>
+</header>
+{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <form class="search mt12" method="get" action="/members/shop" role="search">{{ m.icon('search') }}<input name="q" value="{{ q }}" placeholder="Search store & cafe" aria-label="Search">{% if q %}<a class="clear" href="/members/shop">{{ m.icon('x') }}</a>{% endif %}</form>
+
+  {% if q %}
+    <div class="h2 mt20">Results for “{{ q }}”</div>
+    {% if search_hits %}<div class="grid2 mt12">{% for i in search_hits %}{{ m.product_card(i) }}{% endfor %}</div>{% else %}{{ m.empty('🔍', 'No matches', 'Try “cue”, “chalk”, “glove” or “tee”.') }}{% endif %}
+  {% else %}
+    <div class="tiles mt16">
+      {% for c in categories[:6] %}<a class="tile {{ 'dark' if loop.last and categories|length > 6 }}" href="/members/shop?cat={{ c.name|urlencode }}"><span class="n">{{ c.count }}</span><span style="font-size:24px">{{ c.emoji }}</span><span class="t">{{ c.name }}</span></a>{% endfor %}
+    </div>
+
+    {% if not cat %}
+    <a class="hero dots mt16" href="/members/item/{{ newest[0].id if newest else '' }}">
+      <img src="/members/static/members/demo/hero-club.jpg" alt="">
+      <span class="shade"></span>
+      <div class="txt"><div class="big">Discover<br>what's new</div><div class="sub">Pro cues, Elk Master tips & the club tee</div><span class="cta">See new arrivals {{ m.icon('chev') }}</span></div>
+    </a>
+    <section class="section">
+      <div class="seg" data-tabs="shop" data-url><button class="{{ 'on' if tab != 'popular' }}" data-tab="new">New arrivals</button><button class="{{ 'on' if tab == 'popular' }}" data-tab="popular">Popular</button></div>
+      <div class="grid2 mt12" data-panel="shop" data-name="new">{% for i in newest %}{{ m.product_card(i) }}{% endfor %}</div>
+      <div class="grid2 mt12" data-panel="shop" data-name="popular" hidden>{% for i in popular %}{{ m.product_card(i) }}{% else %}{{ m.empty('📦', 'No sales yet') }}{% endfor %}</div>
+    </section>
+    {% endif %}
+
+    {% for cname, list in groups.items() %}
+    <section class="section">
+      <div class="section-head"><h2 class="h2">{{ cname }}</h2>{% if cat %}<a class="see-all" href="/members/shop">All categories</a>{% else %}<a class="see-all" href="/members/shop?cat={{ cname|urlencode }}">See all</a>{% endif %}</div>
+      <div class="grid2">{% for i in list %}{{ m.product_card(i) }}{% endfor %}</div>
+    </section>
+    {% endfor %}
+    {% if not items %}{{ m.empty('🛍️', 'Store is being stocked', 'Check back soon.') }}{% endif %}
+  {% endif %}
+</div>
+{% endblock %}

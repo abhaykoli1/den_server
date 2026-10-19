@@ -1,4 +1,6 @@
 """Shared services — tenant guards, 402 gate, logs (the PAYMENT ledger), stats, sweeps."""
+from typing import Optional
+
 from fastapi import HTTPException
 from datetime import timedelta
 
@@ -98,19 +100,28 @@ def bill_web_aliases(b: dict) -> dict:
     return b
 
 
-async def get_club(user: dict, club_id: str) -> dict:
+async def get_club(user: dict, club_id: str, allow_member: bool = False) -> dict:
+    """Tenant guard for /clubs/{id}/… routes.
+
+    Member tokens (members app) are *not* staff: they only get the routes that
+    opt in with allow_member=True (bookings). Everything else — member lists,
+    bills, logs, reports — is owner/staff only, even though the member's user
+    doc lists the club in clubIds.
+    """
     db = await db_mod.get_db()
     club = await db.clubs.find_one({"id": club_id})
     if not club:
         raise HTTPException(404, "Club not found")
     if is_master(user):
         return club
+    if user.get("role") == "member" and not allow_member:
+        raise HTTPException(403, "Members can't access club administration — use the members app")
     if club_id not in (user.get("clubIds") or []) and club.get("ownerUserId") != user["id"]:
         raise HTTPException(403, "You don't have access to this club")
     return club
 
 
-def subscription_is_active(sub: dict | None) -> bool:
+def subscription_is_active(sub: Optional[dict]) -> bool:
     """Allow access for the non-terminal subscription states shown in the UI:
     pending, trial, active, past_due, paused, keep_current/current.
     Terminal states expired/cancelled remain blocked."""
@@ -136,7 +147,13 @@ async def billing_gate(user: dict, club: dict):
 
     Prefer the logged-in user's own subscription when they are the owner of the club,
     otherwise fall back to the club owner's record. This avoids false 402s when the UI
-    shows the active plan on the account but the club owner lookup is stale or mismatched."""
+    shows the active plan on the account but the club owner lookup is stale or mismatched.
+    Staff inherit their assigned club's billing access and do not need an individual
+    subscription of their own."""
+    if user.get("role") == "staff":
+        if club.get("id") not in (user.get("clubIds") or []):
+            raise HTTPException(403, "You don't have access to this club")
+        return
     if is_master(user):
         return
     if user["id"] == "local-admin":  # AUTH_DISABLED synthetic admin
@@ -295,6 +312,20 @@ async def club_stats(club: dict) -> dict:
         l.get("amount", 0) for l in logs
         if ist_date(l["createdAt"]) == today and l.get("mode") == "upi"
     )
+    today_start = parse_iso(today + "T00:00:00+05:30")
+    tomorrow_start = today_start + timedelta(days=1)
+    today_frames = await db.frames.find({
+        "clubId": club_id,
+        "createdAt": {"$gte": iso(today_start), "$lt": iso(tomorrow_start)},
+    }).to_list(None)
+    today_wallet = sum(
+        settlement.get("walletPart", 0) or 0
+        for frame in today_frames
+        for settlement in (frame.get("settlements") or [])
+    ) + sum(
+        l.get("amount", 0) for l in logs
+        if ist_date(l["createdAt"]) == today and l.get("mode") == "wallet"
+    )
     members = await db.members.find({"clubId": club_id}).to_list(None)
     total_due = sum(m.get("dueAmount", 0) for m in members)
     active_members = sum(1 for m in members if m.get("active") is not False)
@@ -311,6 +342,7 @@ async def club_stats(club: dict) -> dict:
         "todayEarnings": money(today_earnings),
         "todayCash": money(today_cash),
         "todayUpi": money(today_upi),
+        "todayWallet": money(today_wallet),
         "totalDue": money(total_due),
         "runningSessions": running,
         "activeSessions": running,  # web alias
@@ -347,6 +379,7 @@ def _expired(m: dict) -> bool:
 
 def public_member(m: dict) -> dict:
     m = dict(m)
+    m["dueAmount"] = money(m.get("dueAmount") or 0)
     m["badge"] = member_badge(m)
     return m
 

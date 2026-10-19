@@ -1,6 +1,7 @@
 """JWT auth (HS256 + issuer), Google sign-in verification, role/tenant guards."""
 import re
 from datetime import timedelta
+from typing import Optional
 
 import jwt
 from fastapi import Depends, Header, HTTPException
@@ -80,7 +81,7 @@ async def upsert_user(db, email: str, name: str = "", picture: str = "", google_
     return user
 
 
-async def resolve_member_by_email(db, email: str) -> dict | None:
+async def resolve_member_by_email(db, email: str) -> Optional[dict]:
     normalized = (email or "").strip().lower()
     if not normalized:
         return None
@@ -105,7 +106,7 @@ async def resolve_members_by_email(db, email: str) -> list[dict]:
     return [member for member in matches if member.get("active", True)]
 
 
-async def member_profile_for_user(db, user: dict) -> dict | None:
+async def member_profile_for_user(db, user: dict) -> Optional[dict]:
     member_id = user.get("memberId") or user.get("id")
     if not member_id:
         return None

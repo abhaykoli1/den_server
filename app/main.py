@@ -12,15 +12,16 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import dump_snapshot, get_db
 from .routers import (auth, bookings, clubs, expenses, frames, items, logs, master,
-                      member_portal, members, plans, platform, reports, sessions,
-                      subscriptions, tables, team, tournaments, members_web)
+                      member_portal, members, plans, platform, portal_admin, reports,
+                      sessions, subscriptions, tables, team, tournaments, members_web)
 
 app = FastAPI(title="Rowdy's Den — Club Billing API",
-              version="3.22.2", docs_url=None, openapi_url=None)
+              version="4.1.1", docs_url=None, openapi_url=None)
 docs_basic = HTTPBasic()
 
 app.add_middleware(
@@ -53,14 +54,14 @@ async def validation_handler(_req: Request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def unhandled_handler(_req: Request, exc: Exception):
-    traceback.print_exception(exc)
+    traceback.print_exception(type(exc), exc, exc.__traceback__)
     return JSONResponse(status_code=500,
                         content={"detail": "Something went wrong — please try again"})
 
 
 @app.get("/")
 async def root():
-    return {"name": "Rowdy's Den — Club Billing API", "version": "3.22.2",
+    return {"name": "Rowdy's Den — Club Billing API", "version": "4.1.1",
             "docs": "/docs", "health": "/api/health"}
 
 
@@ -111,9 +112,11 @@ app.include_router(sessions.router, prefix=API_PREFIX)
 app.include_router(frames.router, prefix=API_PREFIX)
 app.include_router(logs.router, prefix=API_PREFIX)
 
-# Members web app (Jinja2-rendered SPA)
+# Members app — server-rendered Jinja2 pages at /members (+ owner-side request APIs)
+app.include_router(portal_admin.router, prefix=API_PREFIX)
 if settings.MEMBERS_WEB_ENABLED:
     app.include_router(members_web.router)
+    app.mount("/members/static", StaticFiles(directory=members_web.STATIC_DIR), name="members_static")
 app.include_router(items.router, prefix=API_PREFIX)
 app.include_router(expenses.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)

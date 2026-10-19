@@ -22,6 +22,8 @@ COLLECTIONS = [
     "sessions", "frames", "menu_items", "item_bills", "membership_sales",
     "expenses", "tournaments", "mailouts", "platform_config", "logs",
     "bookings",
+    # members app (v4): UPI-verified requests + one-time sign-in codes
+    "membership_requests", "wallet_topup_requests", "login_otps",
 ]
 
 _db = None
@@ -267,7 +269,6 @@ async def get_db():
     await ensure_indexes(_db)
     return _db
 
-# dsdsdsdsdsdsdsd
 async def reset_db_for_tests():
     global _db, _snapshot_thread_started
     _db = None

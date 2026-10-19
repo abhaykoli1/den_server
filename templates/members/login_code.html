@@ -1,0 +1,24 @@
+{% extends "members/base.html" %}
+{% block title %}Enter code{% endblock %}
+{% block topbar %}{% endblock %}
+{% block content %}
+<div class="login-wrap fade-in">
+  <div class="center">
+    <div class="login-brand">{{ m.icon('mail') }}</div>
+    <h1 class="login-title" style="font-size:28px">Check your inbox</h1>
+    <p class="login-sub">We sent a 6-digit code to <b>{{ email }}</b>.{% if not sent %} (Mail isn't configured on this server, so the code is shown below.){% endif %}</p>
+  </div>
+  {% if error %}<div class="error mt20">{{ error }}</div>{% endif %}
+  {% if dev_hint %}<div class="notice mt20 center">Dev code: <b class="mono">{{ dev_hint }}</b></div>{% endif %}
+  <form class="card solid mt20" method="post" action="/members/login/verify">
+    <input type="hidden" name="email" value="{{ email }}"><input type="hidden" name="next" value="{{ next }}">
+    <input class="input code" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="••••••" required autofocus>
+    <button class="btn mt12" type="submit">Verify & sign in</button>
+  </form>
+  <form class="center mt16" method="post" action="/members/login/email">
+    <input type="hidden" name="email" value="{{ email }}"><input type="hidden" name="next" value="{{ next }}">
+    <button class="link small muted" type="submit">Didn't get it? Send a new code</button>
+  </form>
+  <p class="center mt12"><a class="link small" href="/members/login">Use a different email</a></p>
+</div>
+{% endblock %}

@@ -1,276 +1,147 @@
-# Rowdy's Den — Members Web App (Jinja2 Integration)
+# Rowdy's Den · Members App
 
-Members app has been **fully integrated into `den_server`** using Jinja2 templates. No separate process needed!
+A mobile-first web app for club members, served by this backend at **`/members`**.
+Server-rendered Jinja2 pages + a small vanilla-JS layer; no build step, no
+separate frontend. Installable as a PWA (manifest + icons) and works as a plain
+website on any phone or desktop.
 
-## What Changed
-
-Previously:
-- Standalone app running on separate port (5173) via `den_mem_web/server.py`
-- Static files served separately
-
-Now:
-- Integrated directly into `den_server` on `/members` route
-- Jinja2 templates with injected configuration
-- Single FastAPI process handles both API and web UI
-- Zero CORS setup needed (same-origin)
-
-## Quick Start
-
-### 1. Start the Backend (den_server)
-
-```bash
-cd /Users/santa/Workspace/den/den_server
-
-# Install dependencies (if not already done)
-pip install -r requirements.txt
-
-# Fresh demo data (optional)
-rm -f .devdata/snapshot.json
-
-# Start the server
-# With dev auth + in-memory MongoDB:
-MONGODB_URI="mongomock://demo" AUTH_DEV_MODE=true PORT=8000 python3 run.py
-
-# OR with production MongoDB + Google auth:
-# PORT=8000 python3 run.py
+```
+./start-members-app.sh            # macOS / Linux  → http://localhost:8000/members
+start-members-app.bat             # Windows
+./start-members-app.sh --fresh    # reset the demo data
+./start-members-app.sh --prod     # real MongoDB from .env
 ```
 
-The server starts on **http://0.0.0.0:8000**
+Demo logins (no password): `ravi@example.com` · `arjun@example.com`
 
-### 2. Open the Members App
+---
 
-Simply open:
-```
-http://localhost:8000/members
-```
+## What members can do
 
-That's it! No separate Python server, no CORS issues, no extra configuration needed.
+| Area | Screen | Highlights |
+|---|---|---|
+| **Home** | `/members` | wallet + due strip, category tiles, live-table strip with running timers, hero, Popular / Cafe / Store grid, events, recent frames & orders |
+| **Live tables** | `/members/tables` | free / in-play / billing per table, elapsed timers, rates (hourly, minimum, glove, by-players, peak), "your game" highlight, auto-refresh |
+| **Cafe** | `/members/cafe` | category chips, search, popular (90-day sales), order to *your* table when you're playing |
+| **Pro shop** | `/members/shop` | cues, tips & ferrules, chalk, gloves, apparel, accessories · new arrivals / popular tabs · stock badges |
+| **Product** | `/members/item/{id}` | photo, price, description, qty stepper, cafe preferences note, related items, share |
+| **Cart & checkout** | `/members/cart` | deliver to table / counter, pay from **wallet**, **add to tab** (respects the club's due limit) or **UPI** (UTR, counter verifies) · stock reserved atomically |
+| **Orders** | `/members/orders`, `/orders/{id}` | app + counter bills, month groups, receipt ticket, fulfilment tracker (placed → preparing → ready → served), pay an unpaid bill from wallet |
+| **Wallet** | `/members/wallet` | balance, derived transaction ledger (table time, winner bonuses, orders, recharges, pass use, dues), dues breakdown, pay dues from wallet, UPI top-up requests, recharge offers |
+| **My frames** | `/members/frames` | W/L, win-rate, streak, hours, spend · month groups · per-frame breakdown (who, table time, cafe items, how you paid, bonus) |
+| **Rankings** | `/members/rankings` | 90-day club leaderboard (wins, then win-rate) with podium |
+| **Bookings** | `/members/bookings` | upcoming/past list, month calendar with dots, **book** (table → day → duration → slot grid with taken/yours/past states), confirmation ticket, `.ics` calendar file, cancel |
+| **Membership** | `/members/membership` | current plan progress, all plans (wallet / frame pass / monthly), buy from wallet or UPI request |
+| **Events** | `/members/tournaments` | upcoming, live brackets progress, register (wallet or counter), withdraw, results |
+| **Activity** | `/members/activity` | member-scoped log feed, unread badge |
+| **More / Profile** | `/members/more`, `/profile` | stats, club contact/directions, dark mode, install, multi-club switch, edit name/phone, player card |
 
-## Configuration
+Sign-in: email on the player card → (optional) 6-digit code by email → session
+cookie. When `MEMBERS_WEB_GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_ID` is configured,
+the login page renders the real Google Identity Services pill button. In local
+dev mode without a client ID, a clearly labelled demo Google chooser is available
+for previewing the flow; it is disabled outside dev mode. Owners / staff are
+refused (they use the billing app).
 
-### Environment Variables
-
-Add these to your `.env` file in `den_server/` to customize the members app:
-
-```bash
-# Members Web App Configuration
-MEMBERS_WEB_API_BASE=/api                              # API endpoint (usually same-origin)
-MEMBERS_WEB_GOOGLE_CLIENT_ID=<your-client-id>         # Google OAuth (optional but recommended)
-MEMBERS_WEB_CLUB_TIMEZONE=Asia/Kolkata                # Timezone for display
-MEMBERS_WEB_TABLES_POLL_MS=20000                       # Live tables refresh rate (ms)
-MEMBERS_WEB_ORDERS_POLL_MS=45000                       # Orders refresh rate (ms)
-MEMBERS_WEB_ENABLED=true                              # Enable/disable the web app
-```
-
-### Where to Set Configuration
-
-1. **Local Development**: Create/edit `.env` in `den_server/`
-   ```bash
-   echo "MEMBERS_WEB_GOOGLE_CLIENT_ID=your-id-here" >> den_server/.env
-   ```
-
-2. **Production (Vercel)**: Set environment variables in Vercel dashboard
-   - Go to: Project Settings → Environment Variables
-   - Add each `MEMBERS_WEB_*` variable
-
-3. **Production (Other hosting)**: Set OS environment variables before starting
-   ```bash
-   export MEMBERS_WEB_GOOGLE_CLIENT_ID="your-id-here"
-   export MEMBERS_WEB_CLUB_TIMEZONE="Asia/Kolkata"
-   python3 run.py
-   ```
-
-### Google OAuth Setup (Optional)
-
-To enable "Sign in with Google" for your members:
-
-**Quick Setup** (5 minutes):
-```bash
-# 1. Create OAuth credentials at https://console.cloud.google.com/
-# 2. Copy your Client ID
-# 3. Set in .env:
-MEMBERS_WEB_GOOGLE_CLIENT_ID=YOUR_CLIENT_ID.apps.googleusercontent.com
-
-# 4. Restart server
-./start-members-app.sh
-
-# 5. Login page will show "Sign in with Google" button
-```
-
-**Full Setup Guide**: See [GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md)
-
-**Quick Reference**: See [QUICK_GOOGLE_SETUP.txt](./QUICK_GOOGLE_SETUP.txt)
-
-## Routing
-
-The members app is served at:
-
-| Route | Purpose |
-|-------|---------|
-| `/members` | Main app (Jinja2 template) |
-| `/members/app.js` | App logic (JavaScript) |
-| `/members/manifest.json` | PWA manifest |
-| `/api/*` | All existing backend endpoints |
-
-## Demo Logins
-
-Same as before — use the existing backend demo:
-
-| Email | Shows |
-|-------|-------|
-| `ravi@example.com` | Wallet member, live on Snooker 1, 1 food order |
-| `arjun@example.com` | Carries a due + pending frame due (pay-due flow) |
-
-## Running on a Custom Port
-
-To run on a different port (e.g., 3000):
-
-```bash
-PORT=3000 python3 run.py
-```
-
-Then access at:
-```
-http://localhost:3000/members
-```
-
-## Running on a Custom Path
-
-If you need to serve the app at a different path (e.g., `/app/members`), this requires updating:
-
-1. Template `base.html` → routes in Jinja2
-2. Router `members_web.py` → prefix
-3. Manifest `scope` and `start_url`
-
-Current setup: `/members` — changes require modifying `app/routers/members_web.py` prefix.
-
-## Features
-
-✅ Login (email + Google OAuth if configured)  
-✅ Club picker for multi-club members  
-✅ Live tables with elapsed timers  
-✅ Wallet & balance management  
-✅ Food ordering with menu search  
-✅ Order history with status timeline  
-✅ Activity feed with filters  
-✅ Frames & match records  
-✅ Member profile & settings  
-✅ Light/dark theme toggle  
-✅ Offline support (localStorage cache)  
-✅ PWA installable  
-✅ Mobile-optimized (430px design)
+---
 
 ## Architecture
 
 ```
-den_server/
-├── app/
-│   ├── main.py                    ← imports members_web router
-│   ├── config.py                  ← MEMBERS_WEB_* settings
-│   └── routers/
-│       ├── members_web.py         ← handles /members routes
-│       └── app.js                 ← app logic (copied from den_mem_web)
-├── templates/
-│   └── members/
-│       └── base.html              ← Jinja2 template with config injection
-└── run.py                         ← starts single FastAPI server
+app/routers/members_web.py    pages   GET /members/*          cookie session (den_member = JWT)
+app/routers/member_portal.py  JSON    /api/member-portal/*    Bearer token, member role only
+app/routers/portal_admin.py   JSON    /api/clubs/{id}/portal/* owner/staff: approve requests, kitchen queue
+app/portal.py                 shared read-model (catalog, tables, frames, bills, ledger, dues, bookings, …)
+templates/members/*.html      Jinja2 pages (base + macros + 20 screens)
+static/members/app.css        warm premium cafe design system + dark mode
+static/members/js/ui.js       shared API/cart/sheet/tab/theme primitives
+static/members/js/flows.js    checkout, dues, UPI, plans, events, cancellation
+static/members/js/pages.js    timers, cart checkout, booking form/calendar, login demo
+static/members/demo/*.jpg     demo product photos · static/members/icons/*  PWA icons
 ```
 
-## Migration from Old Setup (den_mem_web)
+* Pages render from the cookie; **every mutation goes through the JSON API
+  with the Bearer token** (`window.DEN.token`), so the cookie never authorises
+  money movement (no CSRF surface).
+* `get_club()` now rejects member tokens on all `/api/clubs/{id}/…` admin
+  routes (bookings opt in with `allow_member=True`). Members only see their
+  own data through `/api/member-portal/*`.
+* All money paths reuse the existing ledger: wallet debits/credits update
+  `members.walletBalance`, sales are written with `payment_log(...)`, due
+  payments settle unpaid bills oldest-first, stock is decremented with
+  `find_one_and_update` guards and restored on failure — so day-close and
+  reports stay correct.
+* Item photos: `menu_items.image` may be a URL/static path or a `data:` URL;
+  data URLs are served as real images via `/members/img/{item_id}` (cached).
 
-If you were running the old separate server:
+For the full request flow, trust boundaries, auth model and extension rules, see
+[`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-```bash
-# OLD (don't do this anymore):
-cd den_mem_web
-python3 server.py
+## Member API (`/api/member-portal`)
 
-# NEW (just do this):
-cd den_server
-python3 run.py
-# Then open http://localhost:8000/members
+```
+GET  home · dashboard · me · tables · catalog · items/{id}
+GET  orders · orders/{id}          POST orders {items, mode: wallet|counter|upi, utr?, tableId?, note?}
+POST orders/{id}/pay               (settle an unpaid bill from wallet)
+GET  wallet                        POST dues/pay {amount?}   POST wallet/topup-requests {amount, utr}
+GET  frames · rankings · activity  POST activity/seen
+GET  bookings · bookings/availability?tableId&date   POST bookings   DELETE bookings/{id}
+GET  tournaments                   POST/DELETE tournaments/{id}/join {mode: wallet|counter}
+GET  membership-plans              POST membership-plans/{id}/buy {mode: wallet}
+POST membership-requests {planId, utr}   GET requests
+PATCH profile {name?, phone?}      POST switch-club {clubId}
 ```
 
-The old `den_mem_web` directory still exists but is no longer used. You can:
-- Keep it for reference
-- Delete it to save space
-- Archive it in git
+## Owner API (`/api/clubs/{club_id}/portal`)
 
-## Technical Details
+```
+GET  topup-requests?status=pending|approved|rejected|all
+POST topup-requests/{id}/approve {mode: upi|cash|card, note?}     POST …/reject {reason}
+GET  membership-requests?status=…
+POST membership-requests/{id}/approve {mode}                       POST …/reject {reason}
+GET  orders?status=open|all           (kitchen / counter queue of app orders)
+POST orders/{id}/fulfilment {status: placed|preparing|ready|served}
+```
+Approvals book the sale through `payment_log` / `grant_plan` exactly like a
+counter sale. Cancelling an app order = `DELETE /item-bills/{id}` (stock and
+wallet/due are restored by the existing bill logic).
 
-### How Configuration Injection Works
+## Data added
 
-1. User requests `/members`
-2. `members_web.py` renders `base.html` with Jinja2
-3. Configuration from `config.py` is passed as template variables
-4. HTML output includes inline `<script>` with config in `window.DEN_CONFIG`
-5. App JS reads `window.DEN_CONFIG` at runtime
+* `menu_items`: optional `kind` (`cafe`|`shop`), `description`, `featured`,
+  `image`. Without `kind`, the category name decides (Snacks/Beverages/… → cafe).
+* `item_bills` from the app: `source: "member_order"`, `channel`, `deliverTo`,
+  `requestedMode`, `fulfilment`, `paymentRef` + `verification` for UPI.
+* New collections: `wallet_topup_requests`, `membership_requests`, `login_otps`.
+* `clubs.upiId` (or `settings.upiId`) — shown for UPI payments (deep link on
+  phones + copyable ID); `clubs.qrCode` is shown too when present.
+* `users.activitySeenAt` — unread badge.
 
-This means:
-- **No separate config.js file** needed
-- **Configuration is environment-aware** (dev/prod can differ)
-- **No client-side config files** to manage
-- **Same-origin API calls** (no CORS needed)
+## Configuration
 
-### Why This Is Better
+| Env | Default | Meaning |
+|---|---|---|
+| `MEMBERS_WEB_ENABLED` | `true` | mount `/members` |
+| `MEMBERS_WEB_LOGIN_OTP` | `true` in prod, `false` in `AUTH_DEV_MODE` | require an emailed 6-digit code (needs SMTP; dev shows the code on screen) |
+| `MEMBERS_WEB_GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_ID` | — | enables the Google button |
+| `MEMBERS_WEB_TABLES_POLL_MS` | `20000` | live-table refresh |
+| `MEMBERS_WEB_ORDERS_POLL_MS` | `45000` | order-status refresh |
+| `MEMBERS_WEB_CLUB_TIMEZONE` | `Asia/Kolkata` | display timezone |
 
-| Aspect | Old (den_mem_web) | New (Jinja2) |
-|--------|-------------------|--------------|
-| **Processes** | 2 (server.py + den_server) | 1 (den_server only) |
-| **Configuration** | Static file + env vars | Dynamic Jinja2 rendering |
-| **CORS** | Required | Not needed (same-origin) |
-| **Deployment** | 2 services to manage | Single service |
-| **Start time** | 2 servers to start | 1 server to start |
-| **Maintainability** | Split across folders | Centralized |
+## Adding photos to your real items
 
-## Troubleshooting
+Set `image` when creating or patching a menu item through
+`/api/clubs/{club_id}/menu-items` or `/api/clubs/{club_id}/menu-items/{item_id}`.
+It may be a hosted URL, a path under `/static/…`, or a base64
+`data:image/jpeg;base64,…` string (up to 2.5 MB). The menu-item list and
+consolidated club-data response retain the image value; the member catalogue
+serves data-URL images through the cached `/members/img/{item_id}` route.
+Items without an image get a coloured emoji tile.
 
-### "Template not found" error
-- Ensure `templates/members/base.html` exists
-- Check path: should be relative to `den_server/app/`
+## Demo data
 
-### "Jinja2 not found" error
-- Jinja2 is included with FastAPI
-- Make sure `from jinja2 import ...` works: `python3 -c "import jinja2; print(jinja2.__version__)"`
-
-### Members app loads but API calls fail
-- Ensure `/api/*` endpoints are accessible
-- Check CORS_ORIGINS in config.py includes your frontend URL
-- Verify `MEMBERS_WEB_API_BASE` is correct
-
-### Dark mode / theme not working
-- Check browser localStorage: `localStorage.getItem('theme')`
-- Open DevTools → Application → Local Storage → look for `theme` key
-
-### PWA not installable
-- Manifest must be at `/members/manifest.json` ✓
-- HTTPS required on production (development allows HTTP)
-- Icons must be present in `public/icons/`
-
-## API Endpoints Used
-
-The members app talks to these existing backend endpoints:
-
-- `POST /api/auth/login` — email sign-in
-- `POST /api/auth/google` — Google OAuth
-- `GET /api/member-portal/dashboard` — home screen data
-- `GET /api/member-portal/wallet` — balance, transactions, dues
-- `GET /api/member-portal/orders` — order history
-- `GET /api/member-portal/activity` — activity feed
-- `GET /api/member-portal/frames` — snooker frames & matches
-- `GET /api/member-portal/menu` — food menu & items
-- And more (see backend routers)
-
-All endpoints are served from the same `den_server` FastAPI app.
-
-## Next Steps
-
-1. ✅ Integration complete
-2. Test on mobile devices or mobile viewport (430px)
-3. Configure Google OAuth client ID (optional)
-4. Deploy to production
-5. Share `/members` link with club members
-
----
-
-**Questions?** Check the backend README at `den_server/README.md` or the original web app docs at `den_mem_web/README.md`.
+`scripts/seed_demo.py` seeds Rowdy's Den with 3 tables (one live session),
+12 cafe items and 9 pro-shop items with photos, a fortnight of frames, app and
+counter orders, bookings, plan sales, a pending UPI membership request, an
+approved top-up and an upcoming tournament. Ravi has ₹500 in his wallet and no
+dues; Arjun has ₹170 due and 6 frames left on his pass.

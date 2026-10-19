@@ -1,0 +1,39 @@
+{% extends "members/base.html" %}
+{% set back = '/members' %}
+{% block title %}Tables{% endblock %}
+{% block heading %}Tables{% endblock %}
+{% block content %}
+<div class="fade-in" data-live-tables>
+  <div class="row between mt12">
+    <span class="small muted">{{ tables|selectattr('status','equalto','free')|list|length }} free of {{ tables|length }} · open {{ rules.open }} AM – {{ rules.close|hm }}</span>
+    <span class="badge live">live</span>
+  </div>
+  <div class="list mt16">
+  {% for t in tables %}
+    <div class="trow {{ 'live' if t.status == 'live' }}" data-table-id="{{ t.id }}" data-status="{{ t.status }}">
+      <div class="row between">
+        <div><div class="h3">{{ t.name }}</div><div class="xs muted">{{ t.game }} · {{ t.hourlyRate|inr }}/hr{% if t.peakHourlyRate %} · peak {{ t.peakHourlyRate|inr }}/hr {{ t.peakStartHour }}–{{ t.peakEndHour }}h{% endif %}</div></div>
+        {% if t.status == 'live' %}<span class="badge live">{{ 'YOUR GAME' if t.mine else 'IN PLAY' }}</span>{% elif t.status == 'billing' %}<span class="badge warn">Billing</span>{% else %}<span class="badge ok">Free now</span>{% endif %}
+      </div>
+      {% if t.session %}
+        <div class="row between mt12">
+          <div class="row"><span class="avatar-stack">{% for p in t.session.players[:4] %}{{ m.avatar(p.label, 'sm') }}{% endfor %}</span><span class="small">{{ t.session.players|map(attribute='label')|join(' · ') }}</span></div>
+          <span class="mono b" data-since="{{ t.session.startedAt }}">00:00</span>
+        </div>
+        <div class="xs muted mt8">Started {{ t.session.startedAt|dt('time') }}{% if t.session.matchMode != 'solo' %} · {{ t.session.matchMode }}{% endif %}{% if t.session.peak %} · peak rate{% endif %}</div>
+        {% if t.mine %}<a class="btn sm light mt12" href="/members/cafe">Order to this table</a>{% endif %}
+      {% else %}
+        <div class="rates">
+          <div class="r"><div class="v">{{ t.hourlyRate|inr }}</div><div class="k">per hour</div></div>
+          <div class="r"><div class="v">{{ t.minCharge|inr }}</div><div class="k">minimum</div></div>
+          <div class="r"><div class="v">{{ t.glovePrice|inr if t.glovePrice else '—' }}</div><div class="k">glove</div></div>
+        </div>
+        {% if t.ratesByPlayers %}<div class="xs muted mt8">By players: {% for k, v in t.ratesByPlayers.items() %}{{ k }}p {{ v|inr }}{{ ' · ' if not loop.last }}{% endfor %}</div>{% endif %}
+        <a class="btn sm mt12" href="/members/bookings?tab=new&table={{ t.id }}">Book {{ t.name }}</a>
+      {% endif %}
+    </div>
+  {% endfor %}
+  </div>
+  <p class="xs faint center mt16">Auto-refreshes every {{ (tables_poll_ms / 1000)|int }}s · rates set by the club</p>
+</div>
+{% endblock %}

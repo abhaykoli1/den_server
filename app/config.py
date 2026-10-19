@@ -119,6 +119,9 @@ class Settings:
     MEMBERS_WEB_TABLES_POLL_MS: int = _int_env("MEMBERS_WEB_TABLES_POLL_MS", 20000)
     MEMBERS_WEB_ORDERS_POLL_MS: int = _int_env("MEMBERS_WEB_ORDERS_POLL_MS", 45000)
     MEMBERS_WEB_ENABLED: bool = _flag("MEMBERS_WEB_ENABLED", True)
+    # Email one-time-code on member sign-in. Default: ON in production, OFF in dev
+    # (dev shows the code on screen when SMTP isn't configured).
+    MEMBERS_WEB_LOGIN_OTP: bool = _flag("MEMBERS_WEB_LOGIN_OTP", not _flag("AUTH_DEV_MODE", True))
 
     @property
     def is_mock_db(self) -> bool:
@@ -135,5 +138,4 @@ class Settings:
                 out.append(c)
         return out
 
-# dsdsd
 settings = Settings()

@@ -1,0 +1,48 @@
+{% extends "members/base.html" %}
+{% set back = '/members/shop' %}
+{% set nav = False %}
+{% block title %}Cart{% endblock %}
+{% block heading %}Your cart{% endblock %}
+{% block topactions %}<span class="small muted" data-cart-count-lbl></span>{% endblock %}
+{% block content %}
+<div class="fade-in" data-cart-page>
+  <div class="list mt16" data-cart-lines></div>
+
+  <div data-checkout hidden>
+    {% set mine = tables|selectattr('mine')|list %}
+    <div class="opt-head mt24"><span class="h4">Deliver to</span></div>
+    <select class="input" data-table-select>
+      <option value="">Counter pickup</option>
+      {% for t in tables %}<option value="{{ t.id }}" {{ 'selected' if t.mine }}>{{ t.name }}{% if t.mine %} (your game){% elif t.status == 'live' %} (in play){% endif %}</option>{% endfor %}
+    </select>
+    <input class="input mt8" data-order-note placeholder="Note for the kitchen / counter (optional)" maxlength="200">
+
+    <div class="opt-head mt20"><span class="h4">Pay with</span></div>
+    <div class="list">
+      <button class="choice on" data-mode="wallet"><div>{{ m.icon('wallet') }}</div><div class="grow"><div class="t">Wallet</div><div class="s" data-wallet-hint></div></div><span class="box">{{ m.icon('check') }}</span></button>
+      <button class="choice" data-mode="counter"><div>{{ m.icon('receipt') }}</div><div class="grow"><div class="t">Add to my tab</div><div class="s" data-counter-hint></div></div><span class="box">{{ m.icon('check') }}</span></button>
+      {% if club.upiId or club.hasQr %}
+      <button class="choice" data-mode="upi"><div>{{ m.icon('card') }}</div><div class="grow"><div class="t">UPI now</div><div class="s">Pay the club's UPI · counter verifies</div></div><span class="box">{{ m.icon('check') }}</span></button>
+      {% endif %}
+    </div>
+    <div class="card mt12 center" data-upi-box hidden>
+      <div class="small">Pay <b data-upi-amt></b> to <span class="upi-id">{{ club.upiId }}</span></div>
+      {% if club.upiId %}<a class="btn sm mt12 auto" data-upi-link href="#">Open UPI app</a>{% endif %}
+      <input class="input mt12" data-utr placeholder="UPI reference / UTR number">
+    </div>
+
+    <div class="card solid mt20">
+      <div class="kv"><span class="k">Items</span><span class="v" data-cart-count-lbl></span></div>
+      <div class="kv"><span class="k">Total</span><span class="v h3" data-cart-total></span></div>
+      {% if dues.total > 0 %}<div class="kv"><span class="k">Existing due</span><span class="v bad">{{ dues.total|inr }}</span></div>{% endif %}
+    </div>
+    <button class="btn mt16" data-place data-busy="Placing order…">Place order</button>
+    <p class="hint center mt12">Stock is reserved when you place the order. Cafe items are served to your table; store items are kept at the counter for pickup.</p>
+  </div>
+</div>
+{% endblock %}
+{% block denvars %},
+  catalog: {{ catalog_items|tojson_safe|safe }},
+  tables: {{ tables|tojson_safe|safe }},
+  myTableId: {{ ((tables|selectattr('mine')|map(attribute='id')|list or [''])[0])|tojson_safe|safe }}
+{% endblock %}

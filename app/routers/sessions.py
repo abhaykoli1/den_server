@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import db as db_mod
 from ..auth import current_user
-from ..billing import (calc_web_aliases, compute_bill, resolve_hourly,
+from ..billing import (calc_web_aliases, compute_bill, pass_block_reason, resolve_hourly,
                        resolve_sides, table_amount)
 from ..models import (GloveReturnIn, SessionAdvanceIn, SessionConfirmIn,
                       SessionItemsIn, SessionItemsReplaceIn, SessionMoveIn, SessionPatchIn,
@@ -490,12 +490,53 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
             members_map[mid] = m
         else:
             raise HTTPException(400, "A player member no longer exists — cancel and restart")
+    requested_payment_mode = (payload.paymentMode or payload.mode).strip().lower()
+    use_pass = payload.usePass
+    if requested_payment_mode == "pass":
+        # Older sessions can contain a guest player whose label matches a
+        # member, even though that member was not linked when play started.
+        # On explicit Pass payment, link only an unambiguous exact-name match
+        # with an available pass so the authoritative settlement can debit it.
+        blocked_passes = []
+        unlinked_payers = [p for p in losers if not p.get("memberId")]
+        if unlinked_payers:
+            club_members = await db.members.find({"clubId": club["id"]}).to_list(None)
+            for payer in unlinked_payers:
+                name = (payer.get("label") or "").strip().casefold()
+                name_matches = [m for m in club_members
+                                if (m.get("name") or "").strip().casefold() == name]
+                matches = [m for m in name_matches if not pass_block_reason(m)]
+                if len(matches) == 1:
+                    payer["memberId"] = matches[0]["id"]
+                    members_map[matches[0]["id"]] = matches[0]
+                elif len(name_matches) == 1:
+                    blocked_passes.append((name_matches[0]["name"], pass_block_reason(name_matches[0])))
+        use_pass = list(dict.fromkeys(
+            p["memberId"] for p in losers
+            if p.get("memberId") in members_map
+            and not pass_block_reason(members_map[p["memberId"]])
+        ))
+        if not use_pass:
+            for payer in losers:
+                member = members_map.get(payer.get("memberId") or "")
+                if member and pass_block_reason(member):
+                    blocked_passes.append((member.get("name") or payer.get("label") or "Member",
+                                           pass_block_reason(member)))
+            if blocked_passes:
+                name, reason = blocked_passes[0]
+                reason_message = {
+                    "no frames left": "their frame pass has no frames remaining",
+                    "pending due": "they have pending dues to clear first",
+                    "no active frame pass": "their frame pass has expired",
+                }.get(reason, "they do not have an active frame pass")
+                raise HTTPException(400, f"{name} can't use a frame pass — {reason_message}")
+            raise HTTPException(400, "No paying member has an active frame pass")
     calc = compute_bill(s, club, members_map, losers, winners,
-                        payload.discount, payload.cashPaid, payload.usePass)
+                        payload.discount, payload.cashPaid, use_pass)
     # `paymentMode` is the UI-facing field and `mode` is the legacy field.
     # Always use the selected UI mode for ledger entries, even when an older
     # client sends both fields with different values.
-    payment_mode = (payload.paymentMode or payload.mode).strip().lower()
+    payment_mode = requested_payment_mode
     if payment_mode not in ("cash", "upi", "card"):
         payment_mode = payload.mode
 
@@ -597,7 +638,7 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
     # backfill services.frame_web_aliases karta hai)
     frame.update(calc_web_aliases(calc, winners, losers,
                                   mode=payment_mode,
-                                  requested=payment_mode))
+                                  requested=requested_payment_mode))
     await db.frames.insert_one(frame)
     frame.pop("_id", None)
     await write_log(club["id"], "BILLING",

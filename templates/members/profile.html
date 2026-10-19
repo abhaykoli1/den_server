@@ -1,0 +1,26 @@
+{% extends "members/base.html" %}
+{% set back = '/members/more' %}
+{% block title %}Profile{% endblock %}
+{% block heading %}Profile{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <div class="center mt12">{{ m.avatar(member.name, 'lg') }}<div class="h2 mt8">{{ member.name }}</div><div class="small muted">{{ email }}</div>
+    <div class="row mt8 gap6" style="justify-content:center">{% if membership.active %}<span class="badge ok">{{ membership.planName }}</span>{% endif %}{% if member.badge %}<span class="badge">{{ member.badge }}</span>{% endif %}<span class="badge">Member since {{ member.createdAt|dt('month') }}</span></div>
+  </div>
+  <form class="card solid mt20" data-profile-form>
+    <div class="field"><label>Display name</label><input class="input" name="name" value="{{ member.name }}" maxlength="60" required></div>
+    <div class="field mt12"><label>Phone</label><input class="input" name="phone" value="{{ member.phone }}" inputmode="tel" maxlength="20"></div>
+    <div class="field mt12"><label>Email (sign-in)</label><input class="input" value="{{ email }}" disabled><span class="hint">Ask the counter to change your sign-in email.</span></div>
+    <button class="btn mt16" type="submit" data-busy="Saving…">Save changes</button>
+  </form>
+  <div class="card mt12">
+    <div class="h4">Player card</div>
+    <div class="kv mt8"><span class="k">Member ID</span><span class="v mono">{{ member.id[-8:]|upper }}</span></div>
+    <div class="kv"><span class="k">Wallet</span><span class="v">{{ member.walletBalance|inr }}</span></div>
+    <div class="kv"><span class="k">Due</span><span class="v {{ 'bad' if member.dueAmount > 0 }}">{{ member.dueAmount|inr }}</span></div>
+    {% if member.passFramesLeft %}<div class="kv"><span class="k">Pass frames</span><span class="v">{{ member.passFramesLeft }}</span></div>{% endif %}
+    {% if membership.expiresAt %}<div class="kv"><span class="k">Plan valid till</span><span class="v">{{ membership.expiresAt|dt('date') }}</span></div>{% endif %}
+  </div>
+  <p class="hint center mt16">Show this screen at the counter to identify yourself.</p>
+</div>
+{% endblock %}

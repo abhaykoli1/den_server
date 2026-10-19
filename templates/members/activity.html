@@ -1,0 +1,20 @@
+{% extends "members/base.html" %}
+{% set back = '/members' %}
+{% block title %}Activity{% endblock %}
+{% block heading %}Activity{% endblock %}
+{% block topactions %}{% endblock %}
+{% block content %}
+<div class="fade-in mt12">
+  {% for day, rows in groups.items() %}
+    <div class="month-head">{{ day }}</div>
+    <div class="card solid tl">
+    {% for a in rows %}
+      <div class="ev {{ 'hot' if a.unread }}">
+        <div class="row between start"><div class="small grow" style="line-height:1.4">{{ a.message }}</div>{% if a.amount is not none %}<span class="b tabular">{{ a.amount|inr }}</span>{% endif %}</div>
+        <div class="xs muted mt4">{{ a.at|dt('time') }}{% if a.mode %} · {{ a.mode }}{% endif %} · {{ a.tag|lower }}</div>
+      </div>
+    {% endfor %}
+    </div>
+  {% else %}{{ m.empty('🔔', 'No activity yet', 'Payments, frames and orders will show here.') }}{% endfor %}
+</div>
+{% endblock %}

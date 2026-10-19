@@ -1,263 +1,184 @@
-# Members App Architecture
+# Rowdy's Den · Members App Architecture
 
-## Before: Separate Processes
+This document describes the member-facing web application inside `den_server`.
+The app is intentionally a **single FastAPI service**: Jinja2 renders the UI,
+and the same service owns the JSON APIs and billing rules. There is no React
+bundle, Node build, or second frontend server to deploy.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Client Browser                           │
-│                   http://localhost:5173                      │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ↓
-              ┌──────────────────────────────┐
-              │    den_mem_web/server.py     │  Port 5173
-              │  (Proxy + Static Files)      │
-              └──────────────────────────────┘
-                            │
-                            ↓ (proxies /api to)
-              ┌──────────────────────────────┐
-              │    den_server (FastAPI)      │  Port 8000
-              │  - /api/auth/*               │
-              │  - /api/member-portal/*      │
-              │  - All backend logic         │
-              └──────────────────────────────┘
+## Product boundary
 
-❌ 2 processes to manage
-❌ CORS configuration needed
-❌ 2 different ports
-❌ Complex deployment
-```
+`/members` is the member product. It is designed for a phone first, but uses
+the same responsive layout on desktop:
 
-## After: Integrated with Jinja2
+- home dashboard with wallet, dues, live tables, cafe, pro shop and events
+- live table status, rates and elapsed timers
+- cafe and pro-shop catalog with search, categories, item detail and cart
+- wallet, ledger, dues, UPI top-up requests and membership recharge
+- wallet / tab / UPI checkout with stock reservation
+- order receipts and fulfilment status polling
+- table bookings, calendar, availability, confirmation ticket and `.ics`
+- frames, rankings, tournaments, activity, profile, clubs and PWA install
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Client Browser                           │
-│                  http://localhost:8000/members               │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ↓
-        ┌───────────────────────────────────────────┐
-        │    den_server (Single FastAPI App)       │  Port 8000
-        ├───────────────────────────────────────────┤
-        │  Route: /members                          │
-        │  ├─ GET / → Jinja2 render base.html      │
-        │  ├─ GET /app.js → serve app.js           │
-        │  └─ GET /manifest.json → PWA manifest    │
-        ├───────────────────────────────────────────┤
-        │  Route: /api/*                            │
-        │  ├─ /auth/* → authentication              │
-        │  ├─ /member-portal/* → member data       │
-        │  ├─ /clubs/* → club management           │
-        │  └─ ... all existing endpoints           │
-        └───────────────────────────────────────────┘
-                            ↓
-                    [mongomock/MongoDB]
+## Request and trust boundaries
 
-✅ 1 process only
-✅ NO CORS needed (same-origin)
-✅ Single port
-✅ Simple deployment
-✅ Configuration via Jinja2
-```
-
-## How Jinja2 Configuration Works
-
-```
-Client Request: GET /members
+```text
+Browser
+  │
+  ├─ GET /members/*
+  │    Jinja2 SSR pages; reads `den_member` HttpOnly session cookie
+  │
+  ├─ POST /members/login/*
+  │    email OTP or Google Identity Services credential → member session
+  │
+  └─ fetch /api/member-portal/*
+       JSON mutations; sends Bearer JWT from window.DEN.token
        │
-       ↓
-┌─────────────────────────────────┐
-│ FastAPI Handler                 │
-│ (members_web.py)                │
-└─────────────────────────────────┘
-       │
-       ↓
-┌──────────────────────────────────────────┐
-│ Read Configuration                       │
-│ from app/config.py:                      │
-│ ├─ MEMBERS_WEB_API_BASE                 │
-│ ├─ MEMBERS_WEB_GOOGLE_CLIENT_ID         │
-│ ├─ MEMBERS_WEB_CLUB_TIMEZONE            │
-│ ├─ MEMBERS_WEB_TABLES_POLL_MS           │
-│ └─ MEMBERS_WEB_ORDERS_POLL_MS           │
-└──────────────────────────────────────────┘
-       │
-       ↓
-┌──────────────────────────────────────────┐
-│ Render Jinja2 Template                   │
-│ (templates/members/base.html)            │
-│                                          │
-│ Inject config as variables:              │
-│ {{ api_base }}                           │
-│ {{ google_client_id }}                   │
-│ {{ club_timezone }}                      │
-│ {{ tables_poll_ms }}                     │
-│ {{ orders_poll_ms }}                     │
-└──────────────────────────────────────────┘
-       │
-       ↓
-┌──────────────────────────────────────────┐
-│ HTML Response with Inline Config:        │
-│                                          │
-│ <script>                                 │
-│ window.DEN_CONFIG = {                    │
-│   API_BASE: "/api",                      │
-│   GOOGLE_CLIENT_ID: "...",               │
-│   CLUB_TIMEZONE: "Asia/Kolkata",         │
-│   TABLES_POLL_MS: 20000,                 │
-│   ORDERS_POLL_MS: 45000                  │
-│ };                                       │
-│ </script>                                │
-└──────────────────────────────────────────┘
-       │
-       ↓
-Browser renders HTML
-Client-side app.js reads window.DEN_CONFIG
-App makes API calls to /api/*
+       ├─ app/routers/member_portal.py   member-only commands/read APIs
+       ├─ app/portal.py                   shared member read model
+       └─ existing billing services       ledger, stock, dues, plans, frames
+
+Owner/staff console/API
+  └─ /api/clubs/{club_id}/portal/*
+       approve top-ups and membership requests; fulfil app orders
 ```
 
-## Configuration Sources (Priority Order)
+The server-rendered cookie is used to read a page and to establish the initial
+API token. Money-changing browser actions do **not** use the cookie as API
+authorisation; they call the member JSON API with a Bearer token. This keeps
+mutations on one API surface and avoids adding form-based CSRF state-changing
+routes.
 
-```
-1. RUNTIME ENVIRONMENT VARIABLES (Highest Priority)
-   $ export MEMBERS_WEB_API_BASE=/api
-   $ python3 run.py
+`get_club()` rejects member-role tokens on admin routes. Member access is
+explicitly allowed only where intended, such as booking availability and the
+member portal. Owner/staff portal routes are protected separately.
 
-2. .ENV FILE (Medium Priority)
-   den_server/.env
-   MEMBERS_WEB_API_BASE=/api
+## Code map
 
-3. CODE DEFAULTS (Lowest Priority)
-   app/config.py
-   MEMBERS_WEB_API_BASE: str = os.environ.get(
-       "MEMBERS_WEB_API_BASE", "/api"
-   )
-```
+```text
+app/
+├── main.py                         FastAPI app, router registration, static mount
+├── config.py                       environment and feature flags
+├── db.py                           Mongo/MongoMock connection and collections
+├── auth.py                         JWT, Google ID-token verification, user/member lookup
+├── portal.py                       member read-model and view shaping
+├── routers/
+│   ├── members_web.py               Jinja pages, login/session cookie, image proxy
+│   ├── member_portal.py             member JSON API (Bearer token)
+│   ├── portal_admin.py              owner/staff portal JSON API
+│   ├── auth.py                      existing app auth API
+│   └── bookings.py                  shared booking rules
+└── services.py                      club access, billing and ledger helpers
 
-## Routing Layers
+templates/members/
+├── base.html                        shell, theme, PWA metadata, module boot data
+├── _macros.html                     icons, cards, rows, empty states
+├── login*.html                       Google/email sign-in and OTP verification
+└── *.html                           SSR screens (home, cafe, shop, wallet, …)
 
-```
-Application Level:
-  /members              ← Main SPA
-  /members/app.js       ← App logic
-  /members/manifest.json ← PWA manifest
-
-API Level:
-  /api/auth/*                    ← Login, OAuth
-  /api/member-portal/*           ← Dashboard, wallet, orders
-  /api/clubs/*                   ← Club management
-  /api/tables/*                  ← Live tables
-  /api/sessions/*                ← Billing sessions
-  ... (see backend routers)
-
-Admin Level:
-  /api/master/*                  ← Master admin endpoints
-  /api/platform/*                ← Platform settings
-  /docs                          ← Swagger API docs
-  /health                        ← Health check
-```
-
-## Data Flow: API Call Example
-
-```
-User clicks "View Wallet"
-       │
-       ↓
-app.js detects route change
-       │
-       ↓
-Reads window.DEN_CONFIG.API_BASE  → "/api"
-       │
-       ↓
-Makes fetch call:
-GET /api/member-portal/wallet
-with Authorization header (JWT token)
-       │
-       ↓
-FastAPI processes at same origin
-(den_server, port 8000)
-       │
-       ↓
-Returns wallet data (balance, dues, transactions)
-       │
-       ↓
-app.js renders wallet UI
+static/members/
+├── app.css                           single design system, warm cafe theme + dark
+├── js/ui.js                          selectors, API, cart, sheets, tabs, theme
+├── js/flows.js                       checkout, dues, UPI, plans, events, cancel
+├── js/pages.js                       timers, cart page, booking form/calendar
+├── demo/*.jpg                        demo catalogue and hero photography
+└── icons/*                           PWA icons
 ```
 
-## Key Advantages
+The browser enhancement layer is split by responsibility. All three JS files
+are plain browser scripts loaded with `defer` in dependency order:
 
-| Aspect | Benefit |
-|--------|---------|
-| **Same Origin** | No CORS headers needed, secure by default |
-| **Single Port** | Easier to deploy, manage, and monitor |
-| **Jinja2 Templating** | Dynamic config injection, environment-aware |
-| **No Build Step** | Template rendered at request time |
-| **Centralized Config** | All settings in one place (app/config.py) |
-| **Fallback Values** | Works with sensible defaults if not configured |
-| **Environment-Aware** | Dev/staging/prod can have different configs |
-| **PWA Support** | Can be installed as app, works offline |
+1. `ui.js` defines `window.DENx`.
+2. `flows.js` consumes those primitives for action flows.
+3. `pages.js` consumes both for page-specific behaviour.
 
-## Performance Impact
+This keeps the SSR templates usable without a frontend build and makes it
+possible to test individual behaviours with ordinary browser tooling.
 
+## Rendering model
+
+`members_web.py` creates a small Jinja environment with Indian-money, date/time,
+initials, hue, duration and JSON-safe filters. `render()` adds common values:
+
+- current theme and page scheme (`club`, `cafe`, `paper`)
+- club/member summary and API token
+- wallet, due, UPI and polling values
+- cache-busting app version
+
+Templates contain no database queries. They receive view dictionaries from
+`portal.py` or router-specific page context. A page may poll the API for live
+tables or fulfilment status, but it never talks directly to MongoDB.
+
+## Authentication
+
+### Email
+
+1. Member enters an email already linked to a club member profile.
+2. Production sends a short-lived, HMAC-hashed six-digit OTP.
+3. Successful verification calls the same member-user flow as dev login.
+4. A JWT is placed in the `den_member` HttpOnly, SameSite=Lax cookie.
+
+`MEMBERS_WEB_LOGIN_OTP=false` can be used for local demos; the seeded demo
+login then goes straight through. Invalid email, expired code and attempt-limit
+paths all render the same complete login shell so the Google button remains
+available.
+
+### Google
+
+When `MEMBERS_WEB_GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_ID` is set, the login page
+renders the Google Identity Services pill button. Google posts a credential to
+`POST /members/login/google`; the backend verifies signature, issuer, audience
+and verified email before matching the email to a member profile.
+
+In `AUTH_DEV_MODE`, if no client ID is configured, the page can show a clearly
+labelled **demo Google** chooser. It is only a local convenience and the
+endpoint returns 403 when dev mode is off. Production Google login always uses
+real Google ID-token verification.
+
+Owners and staff are redirected away from the members app; they use the main
+billing application.
+
+## Data and billing invariants
+
+Member views are derived from the existing billing collections:
+
+- `members.walletBalance`, `dueAmount`, passes and membership fields
+- `sessions`, `frames`, `item_bills`, `payments` / payment logs
+- `menu_items`, `tables`, `bookings`, `tournaments`, `plans`
+- `wallet_topup_requests`, `membership_requests`, `login_otps`
+
+App orders are `item_bills` with `source=member_order`, requested payment mode,
+delivery destination and fulfilment state. The existing stock guards, wallet
+debits, due creation and ledger/payment helpers remain the source of truth.
+The member UI never invents a second wallet ledger.
+
+UPI is intentionally a verification workflow rather than a fake success:
+member opens a deep link or scans the club QR, submits a UTR, and the owner or
+staff confirms it through `portal_admin.py`. Wallet and plan balances update
+only after confirmation.
+
+## One-click lifecycle
+
+```bash
+./start-members-app.sh             # demo, seed if needed, serve on :8000
+./start-members-app.sh --fresh     # clear .devdata and reseed
+./start-members-app.sh --prod      # use real .env Mongo/JWT/SMTP settings
+start-members-app.bat              # Windows equivalent
 ```
-Before (2 processes):
-  Browser → HTTP → den_mem_web (proxy) → HTTP → den_server
-                   ↑                    ↑
-                   Overhead            Overhead
 
-After (1 process):
-  Browser → HTTP → den_server (both app + api)
-                   ↑
-                   Single hop
-```
+Demo mode exports `MONGODB_URI=mongomock://demo` and `AUTH_DEV_MODE=true`.
+The persistence adapter snapshots demo collections to `.devdata/snapshot.json`.
+The script creates `.venv`, installs `requirements.txt`, serves on
+`0.0.0.0`, and keeps the browser app and API on the same origin.
 
-Network request time: Reduced by ~1 hop
-Total startup time: Reduced (1 server instead of 2)
-Memory usage: Reduced (shared process)
-Maintenance: Simplified (1 codebase, 1 deployment)
+## Extension rules
 
-## Environment-Specific Configuration
+When adding a member feature:
 
-Development:
-```
-MONGODB_URI=mongomock://demo
-AUTH_DEV_MODE=true
-MEMBERS_WEB_API_BASE=/api
-MEMBERS_WEB_GOOGLE_CLIENT_ID=          # Empty for testing
-```
-
-Staging:
-```
-MONGODB_URI=mongodb+srv://...staging...
-AUTH_DEV_MODE=false
-MEMBERS_WEB_API_BASE=https://api-staging.example.com/api
-MEMBERS_WEB_GOOGLE_CLIENT_ID=your-staging-client-id
-```
-
-Production:
-```
-MONGODB_URI=mongodb+srv://...prod...
-AUTH_DEV_MODE=false
-MEMBERS_WEB_API_BASE=https://api.example.com/api
-MEMBERS_WEB_GOOGLE_CLIENT_ID=your-prod-client-id
-```
-
-## Deployment Checklist
-
-- [ ] Set `AUTH_DEV_MODE=false` in production
-- [ ] Configure `GOOGLE_CLIENT_ID` for OAuth
-- [ ] Set `MEMBERS_WEB_GOOGLE_CLIENT_ID` if different from web OAuth
-- [ ] Configure `MONGODB_URI` to production cluster
-- [ ] Set `CORS_ORIGINS` to your domain(s)
-- [ ] Configure SMTP for email notifications
-- [ ] Set `APP_PUBLIC_URL` to your domain
-- [ ] Set `MEMBERS_WEB_ENABLED=true` (or omit, defaults to true)
-- [ ] Test `/members` endpoint in production
-- [ ] Verify API calls work same-origin
-- [ ] Test PWA installation
-- [ ] Monitor error logs
-
----
-
-**For detailed info:** See `den_server/MEMBERS_WEB.md`
+1. Add read shaping to `portal.py`, not to a template.
+2. Add a member command/query to `member_portal.py` and enforce ownership.
+3. Reuse existing billing/ledger helpers for money and stock.
+4. Add owner approval/fulfilment to `portal_admin.py` when the action needs staff.
+5. Add the page as a Jinja template and use `data-*` hooks for enhancement.
+6. Keep the responsive warm design tokens in `app.css`; do not add page-local
+   competing colour systems.
+7. Update `MEMBERS_WEB.md` and add a smoke/E2E check for every mutation.

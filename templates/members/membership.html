@@ -1,0 +1,52 @@
+{% extends "members/base.html" %}
+{% set back = '/members/more' %}
+{% block title %}Membership{% endblock %}
+{% block heading %}Membership{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <div class="card dark mt12">
+    <div class="row between">
+      <div>
+        <div class="xs muted">Current plan</div>
+        <div class="h2">{{ membership.planName or 'Pay as you play' }}</div>
+        <div class="small muted mt4">
+          {% if membership.active %}
+            {% if membership.planType == 'pass' %}{{ membership.passFramesLeft }} frames left{% if membership.daysLeft is not none %} · {{ membership.daysLeft }} days{% endif %}
+            {% elif membership.planType == 'monthly' %}{{ membership.tableDiscountPercent }}% off table time{% if membership.daysLeft is not none %} · {{ membership.daysLeft }} days left{% endif %}
+            {% else %}Wallet member{% endif %}
+          {% elif membership.expired %}Expired{% if membership.expiresAt %} on {{ membership.expiresAt|dt('date') }}{% endif %} — renew below
+          {% else %}No plan yet — pick one below{% endif %}
+        </div>
+      </div>
+      <span style="font-size:34px">{{ '🎟' if membership.planType == 'pass' else ('⭐' if membership.planType == 'monthly' else '💳') }}</span>
+    </div>
+    {% if membership.active and membership.daysLeft is not none and membership.days %}<div class="progress mt12" style="background:rgba(255,255,255,.14)"><i style="width:{{ (100 * membership.daysLeft / membership.days)|round|int }}%;background:#fff"></i></div>{% endif %}
+  </div>
+
+  {% if requests %}{% for r in requests if r.status == 'pending' %}
+  <div class="notice mt12">⏳ <b>{{ r.planName }}</b> · {{ r.amount|inr }} paid on UPI (ref {{ r.utr }}) — activates when the counter confirms.</div>
+  {% endfor %}{% endif %}
+
+  <div class="section-head mt24"><h2 class="h2">Plans</h2><span class="see-all" style="text-decoration:none">{{ plans|length }}</span></div>
+  <div class="list">
+  {% for p in plans %}
+    <div class="card solid">
+      <div class="row between start">
+        <div class="grow">
+          <div class="row"><span style="font-size:22px">{{ p.icon }}</span><span class="h3">{{ p.name }}</span>{% if p.current %}<span class="badge ok">current</span>{% endif %}</div>
+          <div class="small muted mt4">{{ p.benefit }}</div>
+          {% if p.description %}<div class="xs muted mt4">{{ p.description }}</div>{% endif %}
+        </div>
+        <div class="right"><div class="h3">{{ p.amount|inr }}</div>{% if p.days %}<div class="xs muted">{{ p.days }} days</div>{% endif %}</div>
+      </div>
+      <div class="row mt12 gap8">
+        <button class="btn sm" data-buy-plan='{{ p|tojson_safe }}'>{{ 'Renew' if p.current else ('Recharge' if p.type == 'wallet' else 'Buy') }}</button>
+        {% if p.type == 'pass' %}<span class="xs muted">≈ {{ (p.amount / p.frames)|round|inr }} per frame</span>{% elif p.type == 'wallet' and p.value > p.amount %}<span class="xs muted">+{{ (p.value - p.amount)|inr }} bonus credit</span>{% endif %}
+      </div>
+    </div>
+  {% else %}{{ m.empty('⭐', 'No plans published yet') }}{% endfor %}
+  </div>
+  <p class="hint mt16">Pay from your wallet for instant activation, or on UPI and submit the reference. Cash at the counter works too.</p>
+</div>
+{% endblock %}
+{% block denvars %}, qr: {{ qr|tojson_safe|safe }}{% endblock %}

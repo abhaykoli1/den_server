@@ -1,0 +1,61 @@
+{% extends "members/base.html" %}
+{% set back = '/members/cafe' if item.kind == 'cafe' else '/members/shop' %}
+{% set nav = False %}
+{% block title %}{{ item.name }}{% endblock %}
+{% block appclass %}has-sticky{% endblock %}
+{% block topbar %}
+<header class="topbar">
+  <a class="back" href="{{ back }}" aria-label="Back">{{ m.icon('back') }}</a>
+  <div class="grow"></div>
+  <a class="icon-btn" href="/members/cart" aria-label="Cart">{{ m.icon('cart') }}<span class="badge" data-cart-count hidden>0</span></a>
+  <button class="icon-btn" data-share="{{ request.url }}" data-share-title="{{ item.name }}" data-share-text="{{ item.name }} · {{ item.price|inr }} at {{ club.name }}" aria-label="Share">{{ m.icon('share') }}</button>
+</header>
+{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <div class="pcard" style="pointer-events:none"><div class="img" style="border-radius:28px;aspect-ratio:1.05">
+    {% if item.image %}<img src="{{ item.image }}" alt="{{ item.name }}">{% else %}<div class="ph" style="--h:{{ item.name|hue }};font-size:96px">{{ item.emoji }}</div>{% endif %}
+    {% if not item.inStock %}<span class="tag out">Sold out</span>{% elif item.lowStock %}<span class="tag">Only {{ item.stockQty }} left</span>{% endif %}
+  </div></div>
+
+  <div class="row between start mt20">
+    <div class="grow"><div class="xs muted upper">{{ item.category }}</div><h1 class="h2 mt4">{{ item.name }}</h1></div>
+    <div class="right"><div class="h2">{{ item.price|inr }}</div><div class="xs muted">per {{ item.unit }}</div></div>
+  </div>
+  <div class="row mt8 gap6 wrap">
+    {% if item.sold >= 5 %}<span class="badge brand">🔥 {{ item.sold }} sold recently</span>{% endif %}
+    {% if item.featured %}<span class="badge">Staff pick</span>{% endif %}
+    {% if item.inStock %}<span class="badge ok">In stock</span>{% endif %}
+    {% if item.kind == 'cafe' %}<span class="badge">Served at table</span>{% else %}<span class="badge">Counter pickup</span>{% endif %}
+  </div>
+  <p class="muted mt12" style="line-height:1.5">{{ item.description or ('Fresh from the Den cafe — order to your table while you play.' if item.kind == 'cafe' else 'Available at the club counter. Add to cart and pick it up on your next visit.') }}</p>
+
+  <div class="opt-head mt20"><span class="h4">Quantity</span><span class="req">Required</span></div>
+  <div class="opt-row" data-product-qty="{{ item.id }}" data-price="{{ item.price }}" data-stock="{{ item.stockQty }}">
+    <span class="muted small">{{ item.stockQty }} available</span>
+    <span class="stepper"><button type="button" data-dec aria-label="Less">{{ m.icon('minus') }}</button><span class="q" data-q>1</span><button type="button" data-inc aria-label="More">{{ m.icon('plus') }}</button></span>
+  </div>
+
+  {% if item.kind == 'cafe' %}
+  <div class="opt-head"><span class="h4">Preferences</span><span class="xs muted">Optional</span></div>
+  <input class="input" data-item-note placeholder="e.g. less sugar, extra spicy, no onion" maxlength="120">
+  {% elif item.category in ('Apparel',) %}
+  <div class="opt-head"><span class="h4">Size</span><span class="xs muted">Tell the counter at pickup</span></div>
+  <div class="chips" style="margin:0"><span class="chip">S</span><span class="chip on">M</span><span class="chip">L</span><span class="chip">XL</span></div>
+  {% endif %}
+
+  {% if related %}
+  <section class="section">
+    <div class="section-head"><h2 class="h2">You may also like</h2></div>
+    <div class="hscroll">{% for i in related %}{{ m.product_card(i, wide=True) }}{% endfor %}</div>
+  </section>
+  {% endif %}
+</div>
+<div class="stickybar">
+  {% if item.inStock %}
+  <button class="btn" data-product-add data-name="{{ item.name }}" data-image="{{ item.image }}" data-emoji="{{ item.emoji }}" data-kind="{{ item.kind }}" data-hue="{{ item.name|hue }}">Add to cart · <span data-product-total>{{ item.price|inr }}</span></button>
+  {% else %}
+  <button class="btn" disabled>Sold out — ask the counter</button>
+  {% endif %}
+</div>
+{% endblock %}

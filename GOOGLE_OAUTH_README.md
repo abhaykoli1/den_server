@@ -1,212 +1,112 @@
-# ✅ Google OAuth Implementation Complete
+# Google sign-in · Members App
 
-## What's Ready
+The members app has a real **Continue with Google** button implemented with
+Google Identity Services (GSI). The UI is server-rendered by Jinja2; Google
+returns an ID-token credential to `POST /members/login/google`, where the
+backend verifies it before issuing the normal `den_member` session cookie. A
+local styled fallback button stays visible until GSI renders, so sandboxed
+previews that block external scripts still show the login action.
 
-Google Sign-In ("Sign in with Google") is **fully implemented and ready to use** in the members app.
+## Enable it
 
-### Frontend (App)
-✅ Login screen shows Google Sign-In button when configured  
-✅ Google Identity Services script auto-loads  
-✅ Client-side OAuth flow implemented (ID token exchange)  
-✅ Automatic user creation after Google login  
+Set one of these environment variables before starting the server:
 
-### Backend (API)
-✅ `/api/auth/google` endpoint ready  
-✅ ID token verification with Google  
-✅ JWT token generation after verification  
-✅ User sync with MongoDB  
+```env
+MEMBERS_WEB_GOOGLE_CLIENT_ID=1234567890-abc.apps.googleusercontent.com
+# GOOGLE_CLIENT_ID is also accepted as the shared fallback.
+```
 
-### Configuration
-✅ Jinja2 template injects Client ID at runtime  
-✅ Environment variable: `MEMBERS_WEB_GOOGLE_CLIENT_ID`  
-✅ Settings in `app/config.py`  
-✅ Works with dev and production environments  
+The existing backend verifier accepts `GOOGLE_CLIENT_ID` plus any IDs in
+`GOOGLE_CLIENT_IDS` as valid token audiences.
 
-## How to Enable Google Login
+For Google Cloud Console:
 
-### Step 1: Get Google OAuth Credentials
+1. Create a **Web application** OAuth client.
+2. Configure the OAuth consent screen and add the club's support/developer
+   contact.
+3. Add every production hostname as an **Authorized JavaScript origin**. Add
+   localhost origins for local development.
+4. Keep the Client ID in environment configuration. A web Client ID is public;
+   never put a Client Secret in templates or JavaScript.
+5. Restart the app after changing the environment.
+
+GSI uses the login URI below when configured in the template:
+
+```text
+https://your-domain.example/members/login/google
+```
+
+The exact origin/host must be allowed in Google Cloud Console. For a local
+preview, use the URL shown by the one-click script (usually
+`http://localhost:8000`).
+
+## Flow
+
+```text
+/member login page
+  → Google Identity Services pill button
+  → Google credential POST /members/login/google
+  → verify signature, issuer, audience and email_verified
+  → match verified email to a member profile
+  → issue the same member JWT/session as email login
+  → redirect to /members
+```
+
+Only an email already linked to a member profile is accepted in production.
+Owners and staff are redirected to the billing app rather than receiving a
+member session.
+
+## Local demo
 
 ```bash
-# Visit: https://console.cloud.google.com/
-# 1. Create Project
-# 2. Enable "Google Identity Services" API
-# 3. Create OAuth 2.0 Web Client
-# 4. Add Authorized Redirect URIs:
-#    - http://localhost:8000
-#    - https://yourdomain.com
-# 5. Copy Client ID (looks like: xxxxx.apps.googleusercontent.com)
+./start-members-app.sh --fresh
+# open http://localhost:8000/members
 ```
 
-### Step 2: Configure den_server
+`AUTH_DEV_MODE=true` and an empty Google Client ID expose a clearly labelled
+**demo Google** chooser so the UI can be previewed without a Google account.
+The demo endpoint is `/members/login/google-demo` and returns `403` when dev
+mode is disabled. It is not a production authentication method.
 
-**Local Development:**
-```bash
-cd /Users/santa/Workspace/den/den_server
-echo "MEMBERS_WEB_GOOGLE_CLIENT_ID=YOUR_ID.apps.googleusercontent.com" >> .env
-./start-members-app.sh
-```
+The one-click demo may still show the real GSI button if `.env` supplies a
+Client ID; this is expected. Use the real button with an authorised origin, or
+remove the ID from the local environment to preview the demo chooser.
 
-**Production:**
-Set environment variable in your hosting dashboard:
-```
-MEMBERS_WEB_GOOGLE_CLIENT_ID=YOUR_ID.apps.googleusercontent.com
-```
+## Files
 
-### Step 3: Test
-
-Open: `http://localhost:8000/members`
-
-You'll see:
-- Email sign-in field
-- **"Sign in with Google"** button
-- Demo login buttons (if AUTH_DEV_MODE=true)
-
-Click the Google button to test!
-
-## Files & Documentation
-
-### Setup Guides
-- **[GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md)** — Complete setup guide (recommended)
-- **[QUICK_GOOGLE_SETUP.txt](./QUICK_GOOGLE_SETUP.txt)** — Quick reference (5 minutes)
-- **[MEMBERS_WEB.md](./MEMBERS_WEB.md)** — General members app guide
-
-### Code Files
-- **`app/routers/members_web.py`** — Template rendering (injects MEMBERS_WEB_GOOGLE_CLIENT_ID)
-- **`app/routers/auth.py`** — Backend `/api/auth/google` endpoint
-- **`app/routers/app.js`** — Client-side OAuth flow (Views.initGoogle, renderGis)
-- **`templates/members/base.html`** — Template with config injection
-- **`app/config.py`** — MEMBERS_WEB_GOOGLE_CLIENT_ID setting
-
-## Authentication Flow
-
-```
-User clicks "Sign in with Google"
-         ↓
-Browser opens Google login dialog
-         ↓
-User enters Google credentials
-         ↓
-Google returns ID Token to app.js
-         ↓
-app.js POSTs: /api/auth/google { idToken: "..." }
-         ↓
-Backend verifies token with Google's public keys
-         ↓
-Backend creates/updates member in MongoDB
-         ↓
-Backend returns JWT token
-         ↓
-App stores JWT in localStorage
-         ↓
-User is logged in to members app!
-```
-
-## Login Methods Supported
-
-After Google OAuth setup, users can:
-
-1. ✅ **Email Sign-In** — Always available
-   - Enter email → Get magic link / dev code
-   
-2. ✅ **Google Sign-In** — With MEMBERS_WEB_GOOGLE_CLIENT_ID set
-   - Click "Sign in with Google"
-   - Faster, no passwords
-   
-3. ✅ **Demo Login** — When AUTH_DEV_MODE=true
-   - Quick test accounts (ravi@example.com, arjun@example.com)
-
-## Environment Variables
-
-### For Members App
-
-```bash
-# Google OAuth Client ID (recommended)
-MEMBERS_WEB_GOOGLE_CLIENT_ID=YOUR_ID.apps.googleusercontent.com
-
-# API endpoint (for same-origin)
-MEMBERS_WEB_API_BASE=/api
-
-# Timezone for display
-MEMBERS_WEB_CLUB_TIMEZONE=Asia/Kolkata
-
-# Refresh rates
-MEMBERS_WEB_TABLES_POLL_MS=20000
-MEMBERS_WEB_ORDERS_POLL_MS=45000
-
-# Enable/disable app
-MEMBERS_WEB_ENABLED=true
-```
-
-### For Backend Auth
-
-```bash
-# Main OAuth client (for admin panel too)
-GOOGLE_CLIENT_ID=YOUR_ID.apps.googleusercontent.com
-
-# Optional: Additional clients (Flutter app, etc.)
-GOOGLE_CLIENT_IDS=id1.apps.googleusercontent.com,id2.apps.googleusercontent.com
-
-# Auth mode
-AUTH_DEV_MODE=false  # Set to false in production
-```
-
-## Security
-
-✅ Uses Google's official Identity Services library  
-✅ ID tokens verified with Google's public keys  
-✅ No passwords transmitted  
-✅ JWT tokens secured in memory  
-✅ localStorage used for persistence (no sensitive data)  
-✅ HTTPS required in production  
-✅ Localhost exempted for development  
-✅ CORS properly configured  
+- `templates/members/login.html` — real GSI widget or dev demo button
+- `app/routers/members_web.py` — login context, Google credential endpoint,
+  session cookie and dev-only demo endpoint
+- `app/auth.py` — Google JWT verification and member lookup
+- `app/config.py` — `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_IDS`,
+  `MEMBERS_WEB_GOOGLE_CLIENT_ID`
+- `templates/members/base.html` — module boot data and static assets
+- `ARCHITECTURE.md` — complete request, trust-boundary and extension model
 
 ## Troubleshooting
 
-### "Google button not showing"
-→ Check `MEMBERS_WEB_GOOGLE_CLIENT_ID` is set in .env  
-→ Restart server: `./start-members-app.sh`  
-→ Check browser console for errors: `F12` → Console
+### Button is not visible
 
-### "Invalid OAuth Client ID"
-→ Verify Client ID in Google Cloud Console  
-→ Check "Authorized redirect URIs" includes your domain  
-→ Wait 1-2 minutes for changes to propagate
+Check the rendered page source for `g_id_signin`. If it is absent, set
+`MEMBERS_WEB_GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_ID` and restart. In dev mode
+with no client ID, the fallback demo button is shown instead.
 
-### "CORS Error"
-→ Add your domain to Google Console "Authorized redirect URIs"  
-→ Add your domain to `CORS_ORIGINS` in .env  
-→ Restart server
+### `origin is not allowed` or `redirect_uri_mismatch`
 
-## Ready to Deploy
+Add the exact browser origin to the Google OAuth client's Authorized JavaScript
+origins, including scheme and port for local development. Do not add only an
+API path and do not use `localhost` when testing a different preview hostname.
 
-Google OAuth is production-ready:
+### Google succeeds but member access is refused
 
-1. ✅ Setup completed
-2. ✅ Documentation provided
-3. ✅ Backend endpoint verified
-4. ✅ Frontend flow tested
-5. ✅ Configuration management in place
-6. ✅ Error handling implemented
-7. ✅ Security best practices followed
+The verified Google email must match `members.email` (case-insensitive). Add
+that email to the club member record first, then retry.
 
-Just:
-1. Get OAuth credentials from Google
-2. Set `MEMBERS_WEB_GOOGLE_CLIENT_ID`
-3. Deploy
-4. Test on your domain
+### Production checklist
 
-## Next Steps
-
-1. **Follow Setup Guide**: See [GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md)
-2. **Test Locally**: Run ./start-members-app.sh with config
-3. **Deploy**: Set env var in production
-4. **Verify**: Test login on your domain
-5. **Enjoy**: Members can now use Google to sign in! 🎉
-
----
-
-Questions? Check the detailed guides or the code comments in:
-- `app/routers/members_web.py` (template config)
-- `app/routers/auth.py` (backend verification)
-- `app/routers/app.js` (frontend OAuth flow)
+- `AUTH_DEV_MODE=false`
+- `MEMBERS_WEB_LOGIN_OTP=true` unless another approved sign-in policy is used
+- HTTPS enabled
+- exact production origins configured in Google Cloud Console
+- `JWT_SECRET` set to a long random value
+- no SMTP, Mongo or OAuth secrets committed to source control

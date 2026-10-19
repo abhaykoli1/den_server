@@ -3,6 +3,7 @@ import math
 import uuid
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Optional
 
 try:
     from zoneinfo import ZoneInfo
@@ -13,6 +14,45 @@ except Exception:  # pragma: no cover - zoneinfo always present on 3.9+
 
 def uid(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+
+MENU_CATEGORY_ICONS = frozenset({
+    "cafe", "drinks", "snacks", "momo", "burger", "pizza", "cold_drinks",
+    "patties", "chalk", "gloves", "cue", "accessories", "other",
+})
+
+
+def default_menu_category_icon(category: Optional[str]) -> str:
+    normalized = (category or "").strip().lower()
+    if "momo" in normalized:
+        return "momo"
+    if "burger" in normalized:
+        return "burger"
+    if "pizza" in normalized:
+        return "pizza"
+    if "cold drink" in normalized:
+        return "cold_drinks"
+    if "patt" in normalized:
+        return "patties"
+    if normalized in {"cafe", "café", "coffee", "tea"}:
+        return "cafe"
+    if normalized in {"drink", "drinks", "beverage", "beverages"}:
+        return "drinks"
+    if normalized in {"snack", "snacks", "food"}:
+        return "snacks"
+    if "chalk" in normalized:
+        return "chalk"
+    if "glove" in normalized:
+        return "gloves"
+    if "cue" in normalized or "queue" in normalized:
+        return "cue"
+    if "accessor" in normalized:
+        return "accessories"
+    return "other"
+
+
+def menu_category_icon(category: Optional[str], icon: Optional[str] = None) -> str:
+    return icon if icon in MENU_CATEGORY_ICONS else default_menu_category_icon(category)
 
 
 def money(x) -> float:

@@ -1,0 +1,43 @@
+{% extends "members/base.html" %}
+{% set back = '/members/bookings' %}
+{% block title %}Booking{% endblock %}
+{% block topbar %}
+<header class="topbar">
+  <a class="back" href="{{ back }}" aria-label="Back">{{ m.icon('back') }}</a>
+  <div class="grow"></div>
+  <button class="icon-btn" data-share="{{ share_url }}" data-share-title="Table booking" data-share-text="{{ b.tableName }} at {{ club.name }} · {{ b.startAt|dt('rel') }} {{ b.startIST|hm }}–{{ b.endIST|hm }}" aria-label="Share">{{ m.icon('share') }}</button>
+</header>
+{% endblock %}
+{% block content %}
+<div class="ticket-wrap fade-in">
+  <div class="ticket">
+    <div class="check {{ 'warn' if b.status != 'upcoming' }}">{{ m.icon('check' if b.status == 'upcoming' else ('x' if b.status == 'cancelled' else 'trophy')) }}</div>
+    <div class="t">{% if is_new %}Booking confirmed!{% elif b.status == 'upcoming' %}You're booked{% elif b.status == 'cancelled' %}Cancelled{% else %}Played{% endif %}</div>
+    {% set rel = b.startAt|dt('rel') %}
+    <div class="s">{% if b.status == 'upcoming' %}See you {{ 'today' if rel == 'Today' else ('tomorrow' if rel == 'Tomorrow' else 'on ' ~ rel) }} at {{ b.startIST|hm }}. Arrive a few minutes early.{% elif b.status == 'cancelled' %}This booking was cancelled.{% else %}Thanks for playing.{% endif %}</div>
+    <div class="rows">
+      <div class="kv"><span class="k">Table</span><span class="v">{{ b.tableName }}</span></div>
+      <div class="kv"><span class="k">Date</span><span class="v">{{ b.startAt|dt('weekday') }}, {{ b.startAt|dt('date') }}</span></div>
+      <div class="kv"><span class="k">Time</span><span class="v">{{ b.startIST|hm('long') }} – {{ b.endIST|hm('long') }} · {{ b.minutes|duration }}</span></div>
+      <div class="kv"><span class="k">Players</span><span class="v">{{ b.players }}</span></div>
+      <div class="kv"><span class="k">Est. table time</span><span class="v">{{ (rate * b.minutes / 60)|round|inr }} <span class="xs muted">billed at counter</span></span></div>
+      {% if b.notes %}<div class="kv"><span class="k">Note</span><span class="v">{{ b.notes }}</span></div>{% endif %}
+    </div>
+    <div class="rows mt12">
+      <div class="kv"><span class="k">Booking no.</span><span class="v mono">{{ b.id[-6:]|upper }}</span></div>
+      <div class="kv"><span class="k">Booked</span><span class="v">{{ b.createdAt|dt }}</span></div>
+      <div class="kv"><span class="k">Venue</span><span class="v">{{ club.name }}{% if club.address %} · {{ club.address }}{% endif %}</span></div>
+    </div>
+    <div class="tear"></div>
+  </div>
+  <div class="ticket-actions">
+    {% if b.status == 'upcoming' %}
+      <a class="btn light" href="/members/bookings/{{ b.id }}.ics" download>{{ m.icon('calendar') }} Add to calendar</a>
+      <a class="btn light mt8" href="/members/cafe">Pre-order cafe items</a>
+      {% if can_cancel %}<button class="btn danger mt8" data-cancel-booking="{{ b.id }}" data-label="{{ b.tableName }} · {{ b.startAt|dt('rel') }} {{ b.startIST|hm }}" data-busy="Cancelling…">Cancel booking</button>{% endif %}
+    {% else %}
+      <a class="btn" href="/members/bookings?tab=new&table={{ b.tableId }}">Book again</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "members/base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block topbar %}{% endblock %}
+{% block content %}
+<div class="login-wrap fade-in">
+  <div class="login-hero">
+    {% if club is defined and club and club.logo %}<img class="login-logo" src="{{ club.logo }}" alt="">{% else %}<div class="login-brand">🎱</div>{% endif %}
+    <h1 class="login-title">{{ club.name if club and club.name else "Rowdy's Den" }}</h1>
+    <p class="login-sub">Live tables & bookings · cafe to your table · pro shop · wallet & frames — your club, in your pocket.</p>
+  </div>
+
+  {% if error %}<div class="error mt20">{{ error }}</div>{% endif %}
+
+  <div class="mt24">
+    {% if google_configured %}
+    <div class="gsi" id="gsi-widget">
+      <div id="g_id_onload" data-client_id="{{ google_client_id }}" data-login_uri="{{ request.url.scheme }}://{{ request.url.netloc }}/members/login/google" data-ux_mode="redirect" data-auto_prompt="false"></div>
+      <div class="g_id_signin" data-type="standard" data-shape="pill" data-theme="outline" data-size="large" data-text="continue_with" data-width="320"></div>
+    </div>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    {% endif %}
+
+    {# Always keep a local fallback visible. The preview iframe cannot load
+       external Google scripts; pages.js hides this when GSI renders and uses
+       the demo chooser in local AUTH_DEV_MODE. #}
+    <button class="gbtn gsi-fallback" data-google-fallback type="button">
+      <svg class="glogo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Continue with Google{% if google_demo and not google_configured %}<span class="gsub">demo</span>{% endif %}
+    </button>
+    {% if not google_configured and not google_demo %}<p class="hint center mt8">Google sign-in isn't configured yet — add <b>GOOGLE_CLIENT_ID</b> to <span class="mono">.env</span>.</p>{% endif %}
+
+    <div class="or-line mt20">email</div>
+
+    <form class="card solid login-form" method="post" action="/members/login/email">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="field">
+        <label for="email">Email on your player card</label>
+        <input class="input" id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required value="{{ email or '' }}">
+      </div>
+      <button class="btn mt16" type="submit">{% if otp %}Send sign-in code{% else %}Continue{% endif %}</button>
+      <p class="hint center mt12">{% if otp %}We'll email you a 6-digit code — no passwords.{% else %}Passwordless sign-in — just the email the club has on file.{% endif %}</p>
+    </form>
+  </div>
+
+  {% if dev_mode %}
+  <div class="notice mt24"><b>Demo mode</b> · try <a class="link" href="#" onclick="document.getElementById('email').value='ravi@example.com';return false">ravi@example.com</a> (wallet, bookings, orders) or <a class="link" href="#" onclick="document.getElementById('email').value='arjun@example.com';return false">arjun@example.com</a> (due bill, frame pass) — or the Google button.</div>
+  {% endif %}
+  <p class="center xs faint mt24">Not a member yet? Ask at the counter — they'll add your email to your player card.</p>
+</div>
+{% endblock %}
+{% block denvars %},
+  google: { configured: {{ 'true' if google_configured else 'false' }}, clientId: {{ google_client_id|tojson_safe|safe }}, demo: {{ 'true' if google_demo else 'false' }}, accounts: {{ demo_accounts|tojson_safe|safe }}, next: {{ next|tojson_safe|safe }} }
+{% endblock %}

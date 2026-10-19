@@ -1,0 +1,29 @@
+{% extends "members/base.html" %}
+{% set back = '/members/more' %}
+{% block title %}Orders{% endblock %}
+{% block heading %}Orders & bills{% endblock %}
+{% block content %}
+<div class="fade-in">
+  {% if unpaid %}
+  <div class="card dark mt12">
+    <div class="row between"><div><div class="xs muted">Unpaid bills</div><div class="h3">{{ unpaid|map(attribute='dueAmount')|sum|inr }} on your tab</div></div><a class="btn sm" style="background:#fff;color:#111" href="/members/wallet?tab=dues">Clear</a></div>
+  </div>
+  {% endif %}
+  <div class="seg mt16" data-tabs="orders" data-url>
+    <button class="{{ 'on' if tab == 'all' }}" data-tab="all">All</button><button class="{{ 'on' if tab == 'app' }}" data-tab="app">App orders</button><button class="{{ 'on' if tab == 'counter' }}" data-tab="counter">Counter</button><button class="{{ 'on' if tab == 'unpaid' }}" data-tab="unpaid">Unpaid</button>
+  </div>
+  {% for name, filt in [('all', None), ('app', 'app'), ('counter', 'counter'), ('unpaid', 'unpaid')] %}
+  <div class="mt16" data-panel="orders" data-name="{{ name }}" hidden>
+    {% set ns = namespace(any=False) %}
+    {% for month, list in groups.items() %}
+      {% set rows = list if not filt else (list|selectattr('source','equalto',filt)|list if filt != 'unpaid' else list|selectattr('dueAmount','>',0)|list) %}
+      {% if rows %}{% set ns.any = True %}
+        <div class="month-head">{{ month }}</div>
+        <div class="list">{% for o in rows %}{{ m.order_row(o) }}{% endfor %}</div>
+      {% endif %}
+    {% endfor %}
+    {% if not ns.any %}{{ m.empty('🧾', 'Nothing here yet', 'Cafe and store orders show up here.') }}{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

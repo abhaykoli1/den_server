@@ -1,0 +1,47 @@
+{% extends "members/base.html" %}
+{% block title %}Cafe{% endblock %}
+{% block topbar %}
+<header class="topbar">
+  <a href="/members/profile">{{ m.avatar(member.name) }}</a>
+  <div class="grow"><div class="xs muted">Order to your table or pick up</div><div class="h3">Den Cafe</div></div>
+  <a class="icon-btn" href="/members/cart" aria-label="Cart">{{ m.icon('cart') }}<span class="badge" data-cart-count hidden>0</span></a>
+</header>
+{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <form class="search mt12" method="get" action="/members/cafe" role="search">{{ m.icon('search') }}<input name="q" value="{{ q }}" placeholder="Search the menu" aria-label="Search menu">{% if q %}<a class="clear" href="/members/cafe">{{ m.icon('x') }}</a>{% endif %}</form>
+
+  {% set mine = tables|selectattr('mine')|list %}
+  {% if mine %}<div class="card dark mt12 row tight"><span class="badge live">LIVE</span><span class="small grow">You're on <b>{{ mine[0].name }}</b> — orders go straight to your table.</span></div>{% endif %}
+
+  <div class="cats mt16">
+    <a class="cat {{ 'on' if not cat }}" href="/members/cafe"><span class="ico">🍽️</span><span class="t">All</span></a>
+    {% for c in categories %}<a class="cat {{ 'on' if cat|lower == c.name|lower }}" href="/members/cafe?cat={{ c.name|urlencode }}"><span class="ico">{{ c.emoji }}</span><span class="t">{{ c.name }}</span></a>{% endfor %}
+  </div>
+
+  {% if not q and not cat %}
+  <a class="hero warm mt16" href="/members/cafe?cat=Beverages">
+    <img src="/members/static/members/demo/hero-cafe.jpg" alt="">
+    <span class="shade"></span>
+    <div class="txt"><div class="big">Fuel for<br>the decider</div><div class="sub">Cold coffee, maggi & more · served at the table</div></div>
+  </a>
+  {% if popular %}
+  <section class="section">
+    <div class="section-head"><h2 class="h2">Popular</h2><span class="see-all">last 90 days</span></div>
+    <div class="hscroll">{% for i in popular %}{{ m.product_card(i, wide=True) }}{% endfor %}</div>
+  </section>
+  {% endif %}
+  {% endif %}
+
+  {% if items %}
+    {% for cname, list in groups.items() %}
+    <section class="section">
+      <div class="section-head"><h2 class="h2">{{ cname }}</h2><span class="see-all" style="text-decoration:none">{{ list|length }} items</span></div>
+      <div class="grid2">{% for i in list %}{{ m.product_card(i) }}{% endfor %}</div>
+    </section>
+    {% endfor %}
+  {% else %}
+    {{ m.empty('🥲', 'Nothing matches', 'Try another word or browse all.') }}
+  {% endif %}
+</div>
+{% endblock %}

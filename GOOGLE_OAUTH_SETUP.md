@@ -1,278 +1,113 @@
-# Google OAuth Setup Guide for Rowdy's Den
+# Google sign-in setup for Rowdy's Den Members App
 
-## Overview
+This app uses Google Identity Services on the Jinja2 `/members/login` page.
+The browser receives a Google ID-token credential; the backend verifies it and
+then creates the usual `den_member` session.
 
-The members app supports **Google Sign-In** for seamless authentication. Users can log in with their Google account instead of entering a password.
+## 1. Create a Web OAuth client
 
-## Step 1: Create Google OAuth Credentials
+In [Google Cloud Console](https://console.cloud.google.com/):
 
-### 1.1 Go to Google Cloud Console
+1. Create/select a project.
+2. Configure the OAuth consent screen. Use an app name such as **Rowdy's Den
+   Members**, add a support email and developer contact, and publish or add
+   test users as required.
+3. Create **Credentials → OAuth client ID → Web application**.
+4. Add the browser origins under **Authorized JavaScript origins**, for example:
 
-1. Visit: https://console.cloud.google.com/
-2. Sign in with your Google account
-3. Create a new project (or select existing):
-   - Click the project dropdown at the top
-   - Click "NEW PROJECT"
-   - Name it: "Rowdy's Den Members" (or whatever you prefer)
-   - Click CREATE
-
-### 1.2 Enable Google Identity Services API
-
-1. In the Cloud Console, go to APIs & Services → Library
-2. Search for "Google Identity Services"
-3. Click on "Google Identity Services"
-4. Click "ENABLE"
-
-### 1.3 Create OAuth Consent Screen
-
-1. Go to APIs & Services → OAuth consent screen
-2. Select "External" user type
-3. Click CREATE
-4. Fill in the form:
-   - **App name**: Rowdy's Den Members
-   - **User support email**: your-email@gmail.com
-   - **Developer contact**: your-email@gmail.com
-5. Click SAVE AND CONTINUE through all sections
-6. On the final page, click BACK TO DASHBOARD
-
-### 1.4 Create OAuth Client Credentials
-
-1. Go to APIs & Services → Credentials
-2. Click "CREATE CREDENTIALS" → "OAuth client ID"
-3. Select **"Web application"**
-4. Under "Authorized redirect URIs", add:
-   ```
+   ```text
    http://localhost:8000
    http://127.0.0.1:8000
-   https://yourdomain.com          (your production domain)
+   https://members.example.com
    ```
-5. Click CREATE
-6. A dialog will show your credentials:
-   - **Client ID** (copy this)
-   - **Client Secret** (optional for web app)
 
-## Step 2: Configure Rowdy's Den Backend
+   Add the exact origin used by every production/preview deployment. Do not
+   include a path here. Do not add a Client Secret to the app.
 
-### 2.1 Local Development (.env file)
+## 2. Configure the server
 
-Create or update `den_server/.env`:
+In `den_server/.env` or the hosting environment:
+
+```env
+MEMBERS_WEB_GOOGLE_CLIENT_ID=YOUR_CLIENT_ID.apps.googleusercontent.com
+# Optional shared fallback:
+GOOGLE_CLIENT_ID=YOUR_CLIENT_ID.apps.googleusercontent.com
+```
+
+`MEMBERS_WEB_GOOGLE_CLIENT_ID` takes precedence for the members page. The
+backend verifier accepts it together with `GOOGLE_CLIENT_ID` and the IDs in
+`GOOGLE_CLIENT_IDS`.
+
+Restart:
 
 ```bash
-# Google OAuth Web Client (main backend)
-GOOGLE_CLIENT_ID=YOUR_CLIENT_ID_HERE.apps.googleusercontent.com
-
-# Members Web App (can be same or different)
-MEMBERS_WEB_GOOGLE_CLIENT_ID=YOUR_CLIENT_ID_HERE.apps.googleusercontent.com
+./start-members-app.sh                 # demo mode
+./start-members-app.sh --prod          # real Mongo/JWT/SMTP from .env
 ```
 
-### 2.2 Production (Vercel / Hosting Platform)
+Open `http://localhost:8000/members`. The login page should show the Google
+Identity Services pill button above the email sign-in form.
 
-Set environment variables in your hosting dashboard:
+## 3. Login endpoint and flow
 
-**Vercel:**
-1. Go to Project Settings → Environment Variables
-2. Add:
-   - Name: `GOOGLE_CLIENT_ID`
-   - Value: `YOUR_CLIENT_ID_HERE.apps.googleusercontent.com`
-   - Add to: Production, Preview, Development (select all)
-3. Add:
-   - Name: `MEMBERS_WEB_GOOGLE_CLIENT_ID`
-   - Value: `YOUR_CLIENT_ID_HERE.apps.googleusercontent.com`
-   - Add to: Production, Preview, Development (select all)
-4. Click Save
-5. Redeploy your project
+The GSI `login_uri` is:
 
-**Other Platforms:**
-Set the environment variables before starting the server:
-```bash
-export GOOGLE_CLIENT_ID="YOUR_CLIENT_ID_HERE.apps.googleusercontent.com"
-export MEMBERS_WEB_GOOGLE_CLIENT_ID="YOUR_CLIENT_ID_HERE.apps.googleusercontent.com"
-python3 run.py
+```text
+https://YOUR_ORIGIN/members/login/google
 ```
 
-## Step 3: Test Google Login
+`app/routers/members_web.py` accepts the posted credential and calls
+`verify_google_token`. Verification checks:
 
-### 3.1 Start the Backend
+- cryptographic signature using Google's public keys
+- issuer (`accounts.google.com`)
+- configured audience/client ID
+- `email_verified`
 
-```bash
-cd /Users/santa/Workspace/den/den_server
-pip install -r requirements.txt
-MONGODB_URI="mongomock://demo" AUTH_DEV_MODE=false python3 run.py
-```
+The verified email is then matched to an existing club member. The resulting
+JWT is placed in the `den_member` HttpOnly cookie and the member is redirected
+to `/members`.
 
-### 3.2 Open the App
+## 4. Local demo fallback
 
-```
-http://localhost:8000/members
-```
+If `AUTH_DEV_MODE=true` and no Google Client ID is configured, the page shows a
+clearly labelled demo Google chooser. It can select the seeded Ravi/Arjun
+accounts or create a demo member for an entered email. This is only a UI/demo
+convenience; `/members/login/google-demo` returns 403 outside dev mode.
 
-### 3.3 Look for Google Button
+The demo script can still show the real GSI widget if `.env` already contains a
+Client ID. Remove/override the local ID to preview the fallback chooser.
 
-On the login screen, you should see:
-- Email sign-in field
-- **"Sign in with Google"** button
+## 5. Troubleshooting
 
-### 3.4 Test Login
+### Button is missing
 
-1. Click "Sign in with Google"
-2. You'll be redirected to Google's login page
-3. Enter your Google credentials
-4. Authorize the app to access your email
-5. You'll be logged in and redirected to the home screen
-
-## Troubleshooting
-
-### "Google button not showing"
-
-**Cause**: `MEMBERS_WEB_GOOGLE_CLIENT_ID` is empty or not set
-
-**Fix**:
-```bash
-# Check your .env file
-cat den_server/.env | grep GOOGLE
-
-# Should show:
-# MEMBERS_WEB_GOOGLE_CLIENT_ID=...apps.googleusercontent.com
-
-# If empty, restart the server with:
-MEMBERS_WEB_GOOGLE_CLIENT_ID="your-id" python3 run.py
-```
-
-### "Invalid OAuth Client ID"
-
-**Cause**: Client ID not added to Google Cloud Console authorized list
-
-**Fix**:
-1. Go to Google Cloud Console → Credentials
-2. Click your OAuth 2.0 Client ID
-3. Add your localhost and domain to "Authorized redirect URIs"
-4. Save
-5. Restart the server
-
-### "CORS or redirect_uri_mismatch error"
-
-**Cause**: Your domain not listed in Google Cloud Console
-
-**Fix**:
-1. Go to Google Cloud Console → Credentials
-2. Edit your OAuth 2.0 Client ID
-3. Add your domain to Authorized redirect URIs:
-   ```
-   https://yourdomain.com
-   https://yourdomain.com/members
-   ```
-4. Click SAVE
-5. Wait 1-2 minutes for changes to propagate
-
-### "Cross-Origin Request Blocked"
-
-**Cause**: CORS not configured
-
-**Fix**: Make sure in `den_server/.env`:
-```bash
-CORS_ORIGINS=http://localhost:8000,https://yourdomain.com
-```
-
-## Multiple OAuth Clients (Optional)
-
-You can have different OAuth clients for different purposes:
+Check:
 
 ```bash
-# Main backend (used by React admin dashboard)
-GOOGLE_CLIENT_ID=web-client-id.apps.googleusercontent.com
-
-# Members mobile web app (can be same or different)
-MEMBERS_WEB_GOOGLE_CLIENT_ID=members-client-id.apps.googleusercontent.com
-
-# Flutter app (iOS)
-GOOGLE_CLIENT_IDS=flutter-ios-client-id.apps.googleusercontent.com,flutter-android-client-id.apps.googleusercontent.com
+grep -E 'GOOGLE_CLIENT_ID|MEMBERS_WEB_GOOGLE_CLIENT_ID' .env
+curl -s http://localhost:8000/members/login | grep -E 'g_id_signin|data-google-demo'
 ```
 
-All will work with the backend's `/api/auth/google` endpoint.
+Restart after changing `.env`.
 
-## Authentication Flow
+### `origin is not allowed`
 
-```
-1. User clicks "Sign in with Google" button
-                   ↓
-2. Browser loads Google Identity Services (gsi/client.js)
-                   ↓
-3. User enters Google credentials (or already signed in)
-                   ↓
-4. Google returns ID Token to app.js
-                   ↓
-5. app.js POST /api/auth/google { idToken: "..." }
-                   ↓
-6. Backend verifies token signature with Google
-                   ↓
-7. Backend creates/updates user in MongoDB
-                   ↓
-8. Backend returns JWT token
-                   ↓
-9. App stores JWT in localStorage
-                   ↓
-10. User is logged in!
-```
+Add the exact scheme, host and port shown in the browser to Authorized
+JavaScript origins. A sandbox preview hostname is a different origin from
+`localhost`.
 
-## Security Best Practices
+### Google verifies but access is refused
 
-1. **Never expose Client Secret**
-   - Only use Client ID (public)
-   - Keep Client Secret on backend only
+The verified email must already be present in the club `members` data. Ask the
+owner/counter to add the email to the member profile.
 
-2. **Use HTTPS in Production**
-   - Google won't return credentials over HTTP
-   - Dev (localhost) is exempted
+## Production checklist
 
-3. **Verify ID Tokens**
-   - Backend uses Google's public keys
-   - No need to send Client Secret
-
-4. **Restrict Redirect URIs**
-   - Only add domains you control
-   - Use exact URLs, not wildcards
-
-5. **Keep Client ID in Config**
-   - Don't hardcode in frontend
-   - Inject via Jinja2 template
-   - Easy to switch between dev/prod
-
-## API Endpoint
-
-**POST /api/auth/google**
-
-Request:
-```json
-{
-  "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjEifQ..."
-}
-```
-
-Response:
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "user": {
-    "id": "mem_123abc",
-    "email": "user@example.com",
-    "name": "User Name"
-  }
-}
-```
-
-## Next Steps
-
-1. ✅ Create OAuth credentials
-2. ✅ Set `MEMBERS_WEB_GOOGLE_CLIENT_ID` in .env
-3. ✅ Test on localhost
-4. ✅ Deploy to production
-5. ✅ Update Google Console with production domain
-6. ✅ Test in production
-
----
-
-**Questions?** Check:
-- Google OAuth docs: https://developers.google.com/identity/gsi/web
-- Backend auth code: `den_server/app/auth.py`
-- Frontend login code: `den_server/app/routers/app.js` (search "initGoogle")
+- [ ] `AUTH_DEV_MODE=false`
+- [ ] HTTPS enabled
+- [ ] exact production origin configured in Google Cloud
+- [ ] `MEMBERS_WEB_GOOGLE_CLIENT_ID` set in deployment secrets
+- [ ] long random `JWT_SECRET`
+- [ ] no Client Secret, SMTP password or Mongo credential committed to source
+- [ ] test Google email linked to a member before launch

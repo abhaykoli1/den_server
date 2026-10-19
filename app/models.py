@@ -1,7 +1,7 @@
 """Pydantic v2 request models (422 -> readable 400 via exception handler)."""
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class In(BaseModel):
@@ -322,6 +322,10 @@ class MenuItemIn(In):
     name: str = Field(min_length=1, max_length=80)
     image: Optional[str] = Field(default="", max_length=2500000)
     category: str = Field(default="Cafe", max_length=60)
+    categoryIcon: Optional[Literal[
+        "cafe", "drinks", "snacks", "momo", "burger", "pizza", "cold_drinks",
+        "patties", "chalk", "gloves", "cue", "accessories", "other",
+    ]] = None
     price: float = Field(gt=0, le=100000)
     costPrice: float = Field(default=0, ge=0, le=100000)
     stockQty: int = Field(default=0, ge=0, le=1000000)
@@ -333,6 +337,10 @@ class MenuItemPatchIn(In):
     name: Optional[str] = Field(default=None, min_length=1, max_length=80)
     image: Optional[str] = Field(default=None, max_length=2500000)
     category: Optional[str] = Field(default=None, max_length=60)
+    categoryIcon: Optional[Literal[
+        "cafe", "drinks", "snacks", "momo", "burger", "pizza", "cold_drinks",
+        "patties", "chalk", "gloves", "cue", "accessories", "other",
+    ]] = None
     price: Optional[float] = Field(default=None, gt=0, le=100000)
     costPrice: Optional[float] = Field(default=None, ge=0, le=100000)
     stockQty: Optional[int] = Field(default=None, ge=0, le=1000000)
@@ -502,6 +510,29 @@ class TeamStaffIn(In):
     email: str = Field(min_length=3, max_length=120)
     name: str = Field(min_length=1, max_length=80)
     clubId: Optional[str] = None
+
+    @model_validator(mode="after")
+    def normalize_staff_identity(self):
+        self.email = self.email.strip().lower()
+        self.name = self.name.strip()
+        if "@" not in self.email or "." not in self.email.rsplit("@", 1)[-1]:
+            raise ValueError("Enter a valid staff email")
+        if not self.name:
+            raise ValueError("Staff name is required")
+        return self
+
+
+class TeamStaffPatchIn(In):
+    name: str = Field(min_length=1, max_length=80)
+    clubId: str = Field(min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_staff_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Staff name is required")
+        return value
 
 
 class MasterSubPatchIn(In):

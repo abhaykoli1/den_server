@@ -1,0 +1,49 @@
+{% extends "members/base.html" %}
+{% set back = '/members/orders' %}
+{% block title %}Order{% endblock %}
+{% block topbar %}
+<header class="topbar">
+  <a class="back" href="{{ back }}" aria-label="Back">{{ m.icon('back') }}</a>
+  <div class="grow"></div>
+  <button class="icon-btn" data-share="{{ share_url }}" data-share-title="Order at {{ club.name }}" data-share-text="{{ order['items']|map(attribute='name')|join(', ') }} · {{ order.amount|inr }}" aria-label="Share">{{ m.icon('share') }}</button>
+</header>
+{% endblock %}
+{% block content %}
+<div class="ticket-wrap fade-in" data-order-poll="{{ order.id }}" data-fulfilment="{{ order.fulfilment }}" data-paid="{{ '1' if order.paid else '0' }}">
+  <div class="ticket">
+    <div class="check {{ 'warn' if not order.paid }}">{{ m.icon('check' if order.paid else 'clock') }}</div>
+    <div class="t">{% if placed %}Order placed!{% elif order.source == 'app' and order.fulfilment != 'served' %}Order {{ order.fulfilment }}{% else %}{{ 'Paid' if order.paid else order.statusLabel }}{% endif %}</div>
+    <div class="s">{% if order.paid %}Thanks, {{ member.name.split(' ')[0] }} — enjoy.{% elif order.verification == 'pending' %}UPI payment noted — the counter will verify ref {{ order.paymentRef }}.{% else %}On your tab · pay from wallet below or at the counter.{% endif %}</div>
+
+    {% if order.source == 'app' %}
+    {% set steps = ['placed', 'preparing', 'ready', 'served'] %}
+    {% set cur = steps.index(order.fulfilment) if order.fulfilment in steps else 3 %}
+    <div class="steps mt20">{% for s in steps %}<span class="st {{ 'done' if loop.index0 < cur }} {{ 'now' if loop.index0 == cur }}"></span>{% endfor %}</div>
+    <div class="row between xs muted mt4"><span>Placed</span><span>Preparing</span><span>Ready</span><span>Served</span></div>
+    {% endif %}
+
+    <div class="rows">
+      {% for it in order['items'] %}<div class="kv"><span class="v" style="text-align:left;font-weight:600">{{ it.qty }} × {{ it.name }}</span><span class="v">{{ it.amount|inr }}</span></div>{% endfor %}
+      {% if order.discount %}<div class="kv"><span class="k">Discount</span><span class="v ok">−{{ order.discount|inr }}</span></div>{% endif %}
+      <div class="kv"><span class="k">Total</span><span class="v h3">{{ order.amount|inr }}</span></div>
+      {% if order.dueAmount > 0 %}<div class="kv"><span class="k">Due</span><span class="v bad">{{ order.dueAmount|inr }}</span></div>{% endif %}
+    </div>
+    <div class="rows mt12">
+      <div class="kv"><span class="k">Order no.</span><span class="v mono">{{ order.id[-6:]|upper }}</span></div>
+      <div class="kv"><span class="k">Placed</span><span class="v">{{ order.createdAt|dt }}</span></div>
+      {% if order.deliverTo %}<div class="kv"><span class="k">Deliver to</span><span class="v">{{ order.deliverTo }}</span></div>{% endif %}
+      <div class="kv"><span class="k">Payment</span><span class="v">{% if order.paid %}{{ (order.settledMode or order.mode or 'paid')|title }}{% if order.paidAt %} · {{ order.paidAt|dt('rel') }}{% endif %}{% else %}{{ order.statusLabel }}{% endif %}</span></div>
+      {% if order.note %}<div class="kv"><span class="k">Note</span><span class="v">{{ order.note }}</span></div>{% endif %}
+      <div class="kv"><span class="k">Source</span><span class="v">{{ 'Members app' if order.source == 'app' else 'Counter' }}</span></div>
+    </div>
+    <div class="tear"></div>
+  </div>
+  <div class="ticket-actions">
+    {% if order.dueAmount > 0 and order.verification != 'pending' %}
+      <button class="btn" data-pay-order="{{ order.id }}" data-amount="{{ order.dueAmount }}" {{ 'disabled' if member.walletBalance < order.dueAmount }}>Pay {{ order.dueAmount|inr }} from wallet{% if member.walletBalance < order.dueAmount %} (balance {{ member.walletBalance|inr }}){% endif %}</button>
+      {% if member.walletBalance < order.dueAmount %}<button class="btn light mt8" data-topup data-amount="{{ order.dueAmount }}">Top up wallet</button>{% endif %}
+    {% endif %}
+    <a class="btn {{ 'light mt8' if order.dueAmount > 0 else '' }}" href="/members/{{ 'cafe' if order['items'] and order.source == 'app' else 'orders' }}">{{ 'Order again' if order.source == 'app' else 'All orders' }}</a>
+  </div>
+</div>
+{% endblock %}

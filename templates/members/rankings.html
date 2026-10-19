@@ -1,0 +1,27 @@
+{% extends "members/base.html" %}
+{% set back = '/members/more' %}
+{% block title %}Rankings{% endblock %}
+{% block heading %}Club rankings{% endblock %}
+{% block content %}
+<div class="fade-in">
+  <p class="small muted mt8">Last 90 days · ranked by wins, then win rate. Play 3+ frames to be listed.</p>
+  {% if rows|length >= 3 %}
+  <div class="podium mt16">
+    {% for r in [rows[1], rows[0], rows[2]] %}
+    <div class="p {{ 'first' if loop.index == 2 }}"><div class="rank">{{ ['🥈','🥇','🥉'][loop.index0] }}</div>{{ m.avatar(r.name, 'lg' if loop.index == 2 else '') }}<div class="n ellipsis">{{ 'You' if r.isMe else r.name.split(' ')[0] }}</div><div class="w">{{ r.won }}W · {{ r.winRate }}%</div></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <div class="list mt16">
+  {% for r in rows %}
+    <div class="lrow" {% if r.isMe %}style="outline:2px solid var(--ink)"{% endif %}>
+      <span class="b" style="width:22px;text-align:center">{{ r.rank }}</span>
+      {{ m.avatar(r.name) }}
+      <div class="grow"><div class="t">{{ r.name }}{% if r.isMe %} <span class="badge brand">you</span>{% endif %}</div><div class="s">{{ r.frames }} frames · {{ (r.minutes / 60)|round(1) }} hrs</div></div>
+      <div class="right"><div class="amt">{{ r.won }}W {{ r.lost }}L</div><div class="xs muted">{{ r.winRate }}%</div></div>
+    </div>
+  {% else %}{{ m.empty('🏆', 'No rankings yet', 'Once members play 3+ frames the board fills up.') }}{% endfor %}
+  </div>
+  {% if me and not me.rank %}<div class="card mt12 small"><b>You:</b> {{ me.won }}W {{ me.lost }}L from {{ me.frames }} frames — {{ 3 - me.frames if me.frames < 3 else 0 }} more to get ranked.</div>{% endif %}
+</div>
+{% endblock %}
