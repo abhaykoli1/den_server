@@ -42,6 +42,39 @@ def _clean(doc):
     return doc
 
 
+async def _attach_wallet_offer(db, club_id: str, req: dict) -> dict:
+    """Backfill a unique matching offer for pending requests created by older clients."""
+    # Requests created by current clients explicitly say when no bonus offer
+    # was selected. Older requests have no marker, so infer only a unique match.
+    if req.get("offerSelected") is False:
+        return req
+    if req.get("planId") and req.get("creditAmount") is not None:
+        req["bonusAmount"] = money(max(0, req["creditAmount"] - req.get("amount", 0)))
+        return req
+    amount = money(req.get("amount") or 0)
+    plans = await db.plans.find({"clubId": club_id, "type": "wallet"}).to_list(None)
+    matches = [p for p in plans if money(p.get("amount") or 0) == amount]
+    if len(matches) == 1:
+        plan = matches[0]
+        req["creditAmount"] = money(plan.get("value") or plan.get("amount") or 0)
+        req["bonusAmount"] = money(max(0, req["creditAmount"] - amount))
+        req["planId"] = plan.get("id")
+        req["planName"] = plan.get("name")
+        req["offerSelected"] = True
+        if req.get("status") == "pending":
+            await db.wallet_topup_requests.update_one(
+                {"id": req["id"], "clubId": club_id, "status": "pending", "offerSelected": {"$exists": False}},
+                {"$set": {"creditAmount": req["creditAmount"], "planId": req["planId"],
+                          "planName": req["planName"], "bonusAmount": req["bonusAmount"],
+                          "offerSelected": True}},
+            )
+    else:
+        req["creditAmount"] = money(req.get("creditAmount") if req.get("creditAmount") is not None else amount)
+        req["bonusAmount"] = money(max(0, req["creditAmount"] - amount))
+        req["offerSelected"] = False
+    return req
+
+
 # ------------------------------------------------------------- top-ups
 @router.get("/topup-requests")
 async def list_topups(club_id: str, status: str = "pending", user: dict = Depends(current_user)):
@@ -50,7 +83,8 @@ async def list_topups(club_id: str, status: str = "pending", user: dict = Depend
     q = {"clubId": club["id"]}
     if status and status != "all":
         q["status"] = status
-    rows = [_clean(r) for r in await db.wallet_topup_requests.find(q).to_list(500)]
+    rows = [_clean(await _attach_wallet_offer(db, club["id"], r))
+            for r in await db.wallet_topup_requests.find(q).to_list(500)]
     rows.sort(key=lambda r: r.get("createdAt", ""), reverse=True)
     return {"requests": rows}
 
@@ -65,21 +99,32 @@ async def approve_topup(club_id: str, req_id: str, payload: ApproveIn, user: dic
         raise HTTPException(404, "Request not found")
     if req.get("status") != "pending":
         raise HTTPException(400, f"Request already {req.get('status')}")
+    req = await _attach_wallet_offer(db, club["id"], req)
     member = await db.members.find_one({"id": req["memberId"], "clubId": club["id"]})
     if not member:
         raise HTTPException(404, "Member no longer exists")
     amount = money(req["amount"])
+    credit_amount = money(req.get("creditAmount") if req.get("creditAmount") is not None else amount)
+    bonus_amount = money(max(0, credit_amount - amount))
     now = now_iso()
     member = await db.members.find_one_and_update(
-        {"id": member["id"]}, {"$inc": {"walletBalance": amount}, "$set": {"updatedAt": now}})
+        {"id": member["id"], "clubId": club["id"]},
+        {"$inc": {"walletBalance": credit_amount}, "$set": {"updatedAt": now}})
     req = await db.wallet_topup_requests.find_one_and_update(
-        {"id": req_id}, {"$set": {"status": "approved", "approvedAt": now, "approvedBy": user.get("name", ""),
+        {"id": req_id, "clubId": club["id"]}, {"$set": {"status": "approved", "approvedAt": now, "approvedBy": user.get("name", ""),
+                                  "creditAmount": credit_amount, "bonusAmount": bonus_amount,
                                   "mode": payload.mode, "note": payload.note or ""}})
-    await payment_log(club["id"], "memberships", amount, payload.mode,
-                      f"Wallet top-up · {member['name']} · ₹{fmt(amount)} · UPI ref {req.get('utr', '')}",
+    payment_message = (f"Wallet top-up · {member['name']} · paid ₹{fmt(amount)}"
+                       f" · wallet +₹{fmt(credit_amount)}"
+                       + (f" (₹{fmt(bonus_amount)} bonus)" if bonus_amount > 0 else "")
+                       + f" · UPI ref {req.get('utr', '')}")
+    await payment_log(club["id"], "memberships", amount, payload.mode, payment_message,
                       actor=user.get("name", ""), member_id=member["id"], ref_type="topup_request", ref_id=req_id)
+    member = await db.members.find_one({"id": member["id"], "clubId": club["id"]})
     return {"request": _clean(req), "member": public_member(member),
-            "message": f"₹{fmt(amount)} added to {member['name']}'s wallet"}
+            "message": f"₹{fmt(credit_amount)} added to {member['name']}'s wallet"
+                       f" (₹{fmt(amount)} paid"
+                       + (f" · ₹{fmt(bonus_amount)} bonus)" if bonus_amount > 0 else ")")}
 
 
 @router.post("/topup-requests/{req_id}/reject")

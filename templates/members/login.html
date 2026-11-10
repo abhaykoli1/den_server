@@ -6,7 +6,7 @@
   <div class="login-hero">
     {% if club is defined and club and club.logo %}<img class="login-logo" src="{{ club.logo }}" alt="">{% else %}<div class="login-brand">🎱</div>{% endif %}
     <h1 class="login-title">{{ club.name if club and club.name else "Rowdy's Den" }}</h1>
-    <p class="login-sub">Live tables & bookings · cafe to your table · pro shop · wallet & frames — your club, in your pocket.</p>
+    <p class="login-sub">Live tables & bookings · cafe to your table · wallet & frames — your club, in your pocket.</p>
   </div>
 
   {% if error %}<div class="error mt20">{{ error }}</div>{% endif %}

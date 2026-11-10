@@ -7,6 +7,7 @@ stripped by Gmail — a hosted URL is reliable).
 """
 import smtplib
 import ssl
+from html import escape
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -99,6 +100,25 @@ def tpl_balance_notify(club_name: str, member: dict):
         f"A quick summary of your account at {club_name}. Pay dues at the counter "
         "whenever convenient.")
     return f"Your account summary · {club_name}", _wrap(f"Hi {member['name']} — your account 📋", body)
+
+
+def tpl_wallet_topup_request(club_name: str, member: dict, request: dict):
+    member_name = escape(str(member.get("name") or "Member"))
+    club = escape(str(club_name or "your club"))
+    amount = f"₹{fmt(request.get('amount') or 0)}"
+    credit = f"₹{fmt(request.get('creditAmount') or request.get('amount') or 0)}"
+    utr = escape(str(request.get("utr") or ""))
+    body = _rows([
+        ("Club", club),
+        ("Member", member_name),
+        ("Amount paid", amount),
+        ("Wallet credit", credit),
+        ("UPI reference", utr),
+    ]) + _note("Please verify the UPI payment and approve or reject this request in the club app. "
+               "The member's wallet is not credited until an admin approves it.")
+    title = f"Wallet top-up request · {member_name}"
+    subject_club = str(club_name or "your club").replace("\r", " ").replace("\n", " ").strip()
+    return f"Wallet top-up request · {subject_club}", _wrap(title, body)
 
 
 def tpl_plan_expired(club_name: str, member: dict):

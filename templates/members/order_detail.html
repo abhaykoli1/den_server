@@ -42,6 +42,14 @@
     {% if order.dueAmount > 0 and order.verification != 'pending' %}
       <button class="btn" data-pay-order="{{ order.id }}" data-amount="{{ order.dueAmount }}" {{ 'disabled' if member.walletBalance < order.dueAmount }}>Pay {{ order.dueAmount|inr }} from wallet{% if member.walletBalance < order.dueAmount %} (balance {{ member.walletBalance|inr }}){% endif %}</button>
       {% if member.walletBalance < order.dueAmount %}<button class="btn light mt8" data-topup data-amount="{{ order.dueAmount }}">Top up wallet</button>{% endif %}
+      {% if qr or club.upiId %}
+      <div class="card center mt12">
+        <div class="h4">Pay {{ order.dueAmount|inr }} by UPI</div>
+        <p class="hint mt4">Scan the club QR, then show your payment reference at the counter to settle this order.</p>
+        {% if qr %}<img class="qr mt12" src="{{ qr }}" alt="Club UPI payment QR">{% endif %}
+        {% if club.upiId %}<div class="mt8"><span class="upi-id">{{ club.upiId }} <button class="link xs" data-copy="{{ club.upiId }}">copy</button></span></div>{% endif %}
+      </div>
+      {% endif %}
     {% endif %}
     <a class="btn {{ 'light mt8' if order.dueAmount > 0 else '' }}" href="/members/{{ 'cafe' if order['items'] and order.source == 'app' else 'orders' }}">{{ 'Order again' if order.source == 'app' else 'All orders' }}</a>
   </div>

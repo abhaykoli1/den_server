@@ -7,7 +7,7 @@ from ..mail import send_and_record, tpl_balance_notify
 from ..models import (MemberIn, MemberPatchIn, MemberPaymentIn, NotifyIn,
                       PlanPaymentIn)
 from ..services import (billing_gate, book_plan_sale, get_club, grant_plan,
-                        payment_log, public_member, write_log)
+                        deny_staff_mutation, payment_log, public_member, write_log)
 from ..util import fmt, money, now_iso, parse_iso, uid
 
 router = APIRouter(prefix="/clubs/{club_id}/members", tags=["members"])
@@ -123,6 +123,65 @@ async def delete_member(club_id: str, member_id: str, user: dict = Depends(curre
         raise HTTPException(400, f"Clear {member['name']}'s pending due (₹{fmt(member['dueAmount'])}) first")
     await db.members.delete_one({"id": member_id})
     return {"ok": True, "message": f"Player deleted · {member['name']}"}
+
+
+@router.delete("/{member_id}/due")
+async def write_off_member_due(club_id: str, member_id: str,
+                              user: dict = Depends(current_user)):
+    """Write off outstanding due without recording it as collected income."""
+    deny_staff_mutation(user)
+    club = await get_club(user, club_id)
+    db = await db_mod.get_db()
+    member = await db.members.find_one({"id": member_id, "clubId": club["id"]})
+    if not member:
+        raise HTTPException(404, "Player not found")
+    amount = money(member.get("dueAmount") or 0)
+    if amount <= 0:
+        raise HTTPException(400, f"{member['name']} has no pending due")
+
+    now = now_iso()
+    updated = await db.members.find_one_and_update(
+        {"id": member_id, "clubId": club["id"], "dueAmount": member.get("dueAmount", 0)},
+        {"$set": {"dueAmount": 0.0, "updatedAt": now}},
+    )
+    if not updated:
+        raise HTTPException(409, "Due changed while being written off — refresh and try again")
+
+    frames = await db.frames.find({"clubId": club["id"]}).to_list(None)
+    for frame in frames:
+        settlements = frame.get("settlements") or []
+        written_off = 0.0
+        for line in settlements:
+            if line.get("memberId") != member_id:
+                continue
+            due_part = money(line.get("duePart") or 0)
+            if due_part <= 0:
+                continue
+            line["duePart"] = 0.0
+            line["writtenOffPart"] = money((line.get("writtenOffPart") or 0) + due_part)
+            written_off = money(written_off + due_part)
+        if written_off <= 0:
+            continue
+        due_left = money(sum(money(line.get("duePart") or 0) for line in settlements))
+        paid = money(frame.get("paidAmount") or 0)
+        status = "written_off" if due_left <= 0 else ("partial" if paid > 0 else "unpaid")
+        await db.frames.update_one(
+            {"id": frame["id"], "clubId": club["id"]},
+            {"$set": {
+                "settlements": settlements,
+                "dueAmount": due_left,
+                "writtenOffAmount": money((frame.get("writtenOffAmount") or 0) + written_off),
+                "status": status,
+                "updatedAt": now,
+            }},
+        )
+
+    await write_log(
+        club["id"], "WARNING",
+        f"Due written off · {member['name']} · ₹{fmt(amount)}",
+        actor=user.get("name", ""), member_id=member_id, amount=amount,
+    )
+    return {"ok": True, "message": f"Due written off · {member['name']} · ₹{fmt(amount)}"}
 
 
 @router.post("/{member_id}/payments")

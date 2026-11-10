@@ -6,11 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from .. import db as db_mod
 from ..auth import current_user
 from ..billing import (calc_web_aliases, compute_bill, pass_block_reason, resolve_hourly,
-                       resolve_sides, table_amount)
+                       resolve_sides, session_table_amount)
 from ..models import (GloveReturnIn, SessionAdvanceIn, SessionConfirmIn,
                       SessionItemsIn, SessionItemsReplaceIn, SessionMoveIn, SessionPatchIn,
                       SessionPlayerIn, SessionStartIn)
-from ..services import (alias_player_ids, billing_gate, get_club, payment_log,
+from ..services import (alias_player_ids, billing_gate, deny_staff_mutation, get_club, payment_log,
                         wants_web, write_log)
 from ..util import (ceil_minutes, fmt, money, now_iso, split_evenly, uid)
 
@@ -34,8 +34,7 @@ def _preview(session: dict) -> dict:
     else:
         end = session["endedAt"]
     minutes = ceil_minutes(session["startedAt"], end)
-    amt = table_amount(float(session.get("hourlyRate", 0)), minutes,
-                       float(session.get("minCharge", 0) or 0))
+    amt = session_table_amount(session, minutes)
     items_amt = money(sum(i.get("amount", 0) for i in session.get("items") or []))
     gloves = money(sum(g.get("price", 0) for g in (session.get("gloves") or [])
                        if not g.get("returned")))
@@ -97,7 +96,9 @@ async def start_session(club_id: str, payload: SessionStartIn,
         b = [p for p in players if p.get("team") == "B"]
         if not a or not b:
             raise HTTPException(400, "2v2 needs players in both Team A and Team B")
-    hourly, peak = resolve_hourly(table["rate"], len(players))
+    billing_mode = table["rate"].get("billingMode", "hourly")
+    hourly, peak = resolve_hourly(table["rate"], len(players)) if billing_mode == "hourly" \
+        else (float(table["rate"].get("hourlyRate", 0)), False)
     gloves = []
     if payload.gloveSeatIndexes:
         price = float(table["rate"].get("glovePrice") or 0)
@@ -113,6 +114,11 @@ async def start_session(club_id: str, payload: SessionStartIn,
         "id": uid("s"), "clubId": club["id"], "tableId": table["id"],
         "tableName": table["name"], "startedAt": now_iso(), "endedAt": None,
         "players": players, "playerCount": len(players),
+        "sport": table.get("sport", "snooker"),
+        "billingMode": billing_mode, "unitsPlayed": 1,
+        "taxEnabled": bool((club.get("settings") or {}).get("taxEnabled", False)),
+        "taxRate": float((club.get("settings") or {}).get("taxRate", 0) or 0),
+        "taxLabel": (club.get("settings") or {}).get("taxLabel") or "Tax",
         "hourlyRate": hourly, "minCharge": float(table["rate"].get("minCharge") or 0),
         "peak": peak, "matchMode": payload.matchMode,
         "items": [], "itemsTotal": 0, "discount": 0,
@@ -122,6 +128,9 @@ async def start_session(club_id: str, payload: SessionStartIn,
     if gloves:
         session["gloves"] = gloves
     await db.sessions.insert_one(session)
+    if table.get("lightEnabled"):
+        await db.tables.update_one({"id": table["id"], "clubId": club["id"]},
+                                   {"$set": {"lightState": "on", "lightUpdatedAt": now_iso()}})
     if payload.advancePaid > 0:
         await payment_log(club["id"], "frames", payload.advancePaid, payload.advanceMode,
                           f"Advance · {table['name']} · ₹{fmt(payload.advancePaid)}",
@@ -532,7 +541,9 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
                 raise HTTPException(400, f"{name} can't use a frame pass — {reason_message}")
             raise HTTPException(400, "No paying member has an active frame pass")
     calc = compute_bill(s, club, members_map, losers, winners,
-                        payload.discount, payload.cashPaid, use_pass)
+                        payload.discount, payload.cashPaid, use_pass,
+                        units_played=payload.unitsPlayed,
+                        include_old_due=payload.includeOldDue)
     # `paymentMode` is the UI-facing field and `mode` is the legacy field.
     # Always use the selected UI mode for ledger entries, even when an older
     # client sends both fields with different values.
@@ -620,6 +631,7 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
         "losers": [l["label"] for l in losers],
         "matchMode": s.get("matchMode", "solo"),
         "hourlyRate": calc["hourlyRate"], "minCharge": calc["minCharge"],
+        "billingMode": calc["billingMode"], "unitsPlayed": calc["unitsPlayed"],
         "peak": s.get("peak", False),
         "tableAmount": calc["tableAmount"], "itemsAmount": calc["itemsAmount"],
         "items": calc["items"],
@@ -627,8 +639,15 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
         "winnerBonus": calc["winnerBonus"], "discount": calc["discount"],
         "gloves": calc["gloves"], "gloveCharges": calc["gloveCharges"],
         "frameAmount": calc["frameAmount"],
+        "oldDueIncluded": calc.get("oldDueIncluded", False),
+        "taxableAmount": calc["taxableAmount"], "taxAmount": calc["taxAmount"],
+        "taxRate": calc["taxRate"], "taxLabel": calc["taxLabel"],
         "advancePaid": s.get("advancePaid", 0), "advanceUsed": calc["advanceUsed"],
         "cashCollected": calc["collectedNow"],
+        "oldDueNow": calc.get("oldDueNow", 0),
+        "oldDueIncluded": calc.get("oldDueIncluded", False),
+        "oldDueIncludedAmount": calc.get("oldDueIncludedAmount", 0),
+        "oldDueIncludedByMember": calc.get("oldDueIncludedByMember", {}),
         "settlements": calc["settlements"], "passApplied": calc["passApplied"],
         "winnerCredits": winner_credits,
         "notes": s.get("notes", ""),
@@ -648,6 +667,10 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
 
     # --- session dies on confirm; the frame is the record ------------------
     await db.sessions.delete_one({"id": session_id})
+    table = await db.tables.find_one({"id": s["tableId"], "clubId": club["id"]})
+    if table and table.get("lightEnabled"):
+        await db.tables.update_one({"id": table["id"], "clubId": club["id"]},
+                                   {"$set": {"lightState": "off", "lightUpdatedAt": now_iso()}})
     message = f"Session confirmed · ₹{fmt(calc['frameAmount'])}"
     if calc["notes"]:
         message += " · " + "; ".join(calc["notes"])
@@ -659,6 +682,7 @@ async def confirm_session(request: Request, club_id: str, session_id: str, paylo
 @router.delete("/{session_id}")
 async def cancel_session(club_id: str, session_id: str, user: dict = Depends(current_user)):
     """Cancel = delete + restore attached stock. Gloves never charged (no frame)."""
+    deny_staff_mutation(user)
     club = await get_club(user, club_id)
     db = await db_mod.get_db()
     s = await _get_session(db, club["id"], session_id)
@@ -669,6 +693,10 @@ async def cancel_session(club_id: str, session_id: str, user: dict = Depends(cur
             {"id": item["menuItemId"], "clubId": club["id"]},
             {"$inc": {"stockQty": item["qty"]}})
     await db.sessions.delete_one({"id": session_id})
+    table = await db.tables.find_one({"id": s.get("tableId"), "clubId": club["id"]})
+    if table and table.get("lightEnabled"):
+        await db.tables.update_one({"id": table["id"], "clubId": club["id"]},
+                                   {"$set": {"lightState": "off", "lightUpdatedAt": now_iso()}})
     msg = f"Session cancelled · {s.get('tableName', '')}"
     if s.get("items"):
         msg += f" · {sum(i['qty'] for i in s['items'])} item(s) returned to stock"

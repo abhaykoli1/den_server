@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import db as db_mod
 from ..auth import current_user
+from ..models import DayCloseIn
 from ..services import deny_staff_admin, get_club, wants_web
-from ..util import days_in_month, ist_date, ist_hour, ist_month, money, month_of, today_ist
+from ..util import days_in_month, ist_date, ist_hour, ist_month, money, month_of, now_iso, today_ist
 
 router = APIRouter(prefix="/clubs/{club_id}/reports", tags=["reports"])
 MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
@@ -264,6 +265,7 @@ async def day_close(request: Request, club_id: str, date: str = "", user: dict =
     if not DATE_RE.match(day):
         raise HTTPException(400, "Date must look like YYYY-MM-DD")
     db = await db_mod.get_db()
+    reconciliation = await db.day_closes.find_one({"clubId": club["id"], "date": day})
     logs, expenses, bills, frames, members, *_ = await _load(db, club["id"])
     payments = [l for l in logs if ist_date(l["createdAt"]) == day]
     income_rows = _income_rows(payments)
@@ -337,12 +339,31 @@ async def day_close(request: Request, club_id: str, date: str = "", user: dict =
             "cashCollected": cash_collected, "expenses": exp_total,
             "drawerCash": drawer, "upi": by_mode.get("upi", 0),
             "card": by_mode.get("card", 0),
+            "actualCash": (reconciliation or {}).get("actualCash"),
+            "cashVariance": money((reconciliation or {}).get("actualCash", drawer) - drawer),
+            "reconciledAt": (reconciliation or {}).get("updatedAt"),
+            "reconciliationNote": (reconciliation or {}).get("note", ""),
         },
         "pendingDue": pending_due,
     }
     if wants_web(request):  # web maps expenses.byCategory as an ARRAY
         resp["expenses"]["byCategory"] = resp["expenseCategories"]
     return resp
+
+
+@router.put("/day-close")
+async def save_day_close(club_id: str, payload: DayCloseIn, user: dict = Depends(current_user)):
+    deny_staff_admin(user)
+    club = await get_club(user, club_id)
+    day = payload.date or today_ist()
+    if not DATE_RE.match(day):
+        raise HTTPException(400, "Date must look like YYYY-MM-DD")
+    db = await db_mod.get_db()
+    doc = {"clubId": club["id"], "date": day, "actualCash": money(payload.actualCash),
+           "note": (payload.note or "").strip(), "updatedAt": now_iso(),
+           "updatedBy": user.get("name", "")}
+    await db.day_closes.update_one({"clubId": club["id"], "date": day}, {"$set": doc}, upsert=True)
+    return {"ok": True, **doc}
 
 
 @router.get("/utilisation")

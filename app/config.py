@@ -62,6 +62,7 @@ def _clean_mongo_uri(v: str) -> str:
 
 
 class Settings:
+    APP_ENV: str = os.environ.get("APP_ENV", "development").strip().lower()
     # --- database
     MONGODB_URI: str = _clean_mongo_uri(os.environ.get("MONGODB_URI", "mongomock://demo"))
     MONGODB_DB: str = os.environ.get("MONGODB_DB", "rowdys_den")
@@ -78,7 +79,7 @@ class Settings:
         for c in os.environ.get("GOOGLE_CLIENT_IDS", "").split(",")
         if c.strip()
     ]
-    AUTH_DEV_MODE: bool = _flag("AUTH_DEV_MODE", True)
+    AUTH_DEV_MODE: bool = _flag("AUTH_DEV_MODE", APP_ENV != "production")
     AUTH_DISABLED: bool = _flag("AUTH_DISABLED", False)
     DOCS_USERNAME: str = os.environ.get("DOCS_USERNAME", "")
     DOCS_PASSWORD: str = os.environ.get("DOCS_PASSWORD", "")
@@ -112,6 +113,34 @@ class Settings:
     MAIL_FROM: str = os.environ.get("MAIL_FROM", "Rowdy's Den <no-reply@localhost>")
     APP_PUBLIC_URL: str = os.environ.get("APP_PUBLIC_URL", "")
 
+    def validate_production(self) -> None:
+        """Fail closed when production is explicitly selected but demo settings remain."""
+        if self.APP_ENV not in ("development", "test", "staging", "production"):
+            raise RuntimeError("APP_ENV must be development, test, staging, or production")
+        if self.APP_ENV != "production":
+            return
+        problems = []
+        if self.is_mock_db or "user:pass@" in self.MONGODB_URI or ".example" in self.MONGODB_URI:
+            problems.append("MONGODB_URI must point to the production MongoDB cluster")
+        if self.AUTH_DEV_MODE or self.AUTH_DISABLED:
+            problems.append("AUTH_DEV_MODE and AUTH_DISABLED must both be false")
+        if (len(self.JWT_SECRET) < 32 or len(set(self.JWT_SECRET)) < 10
+                or any(x in self.JWT_SECRET.lower() for x in ("change-me", "replace-me", "your-secret"))):
+            problems.append("JWT_SECRET must be a unique secret of at least 32 characters")
+        if not self.google_audiences or any("your-google-oauth" in a for a in self.google_audiences):
+            problems.append("GOOGLE_CLIENT_ID must be configured")
+        if not self.MASTER_ADMIN_EMAILS or any(e.endswith(("@rowdys.dev", "@example.com")) for e in self.MASTER_ADMIN_EMAILS):
+            problems.append("MASTER_ADMIN_EMAILS must contain real administrator accounts")
+        if not self.CORS_ORIGINS or any(
+                not o.startswith("https://") or "localhost" in o or "127.0.0.1" in o or o == "*"
+                for o in self.CORS_ORIGINS):
+            problems.append("CORS_ORIGINS must contain only HTTPS production app origins")
+        if (not self.APP_PUBLIC_URL.startswith("https://") or ".example.com" in self.APP_PUBLIC_URL
+                or "localhost" in self.APP_PUBLIC_URL):
+            problems.append("APP_PUBLIC_URL must be the public HTTPS application URL")
+        if problems:
+            raise RuntimeError("Invalid production configuration: " + "; ".join(problems))
+
     # --- members web app (Jinja2-rendered SPA)
     MEMBERS_WEB_API_BASE: str = os.environ.get("MEMBERS_WEB_API_BASE", "/api")
     MEMBERS_WEB_GOOGLE_CLIENT_ID: str = os.environ.get("MEMBERS_WEB_GOOGLE_CLIENT_ID", "") or os.environ.get("GOOGLE_CLIENT_ID", "")
@@ -129,11 +158,11 @@ class Settings:
 
     @property
     def google_audiences(self) -> list:
-        """All OAuth client IDs a Google ID token may be issued for (web + app)."""
+        """All OAuth client IDs a Google ID token may be issued for (members web + app)."""
         out = []
-        if self.GOOGLE_CLIENT_ID:
-            out.append(self.GOOGLE_CLIENT_ID)
-        for c in self.GOOGLE_CLIENT_IDS:
+        for c in [self.GOOGLE_CLIENT_ID, self.MEMBERS_WEB_GOOGLE_CLIENT_ID, *self.GOOGLE_CLIENT_IDS]:
+            if not c:
+                continue
             if c not in out:
                 out.append(c)
         return out

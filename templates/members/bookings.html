@@ -11,13 +11,13 @@
   {# ---- list #}
   <div class="mt16" data-panel="bk" data-name="list" hidden>
     {% if upcoming %}
-      <div class="list">{% for b in upcoming %}{{ m.booking_row(b) }}{% endfor %}</div>
+      <div class="list row-list">{% for b in upcoming %}{{ m.booking_row(b) }}{% endfor %}</div>
     {% else %}
       <div class="card center"><div class="e" style="font-size:36px">📅</div><div class="b mt8">No upcoming bookings</div><p class="small muted mt4">Reserve a table up to {{ rules.maxDays }} days ahead.</p><button class="btn sm mt12" data-tab-go="new" onclick="document.querySelector('[data-tabs=bk] [data-tab=new]').click()">Book a table</button></div>
     {% endif %}
     {% if past %}
       <div class="month-head">Past</div>
-      <div class="list">{% for b in past[:10] %}{{ m.booking_row(b) }}{% endfor %}</div>
+      <div class="list row-list">{% for b in past[:10] %}{{ m.booking_row(b) }}{% endfor %}</div>
     {% endif %}
   </div>
 

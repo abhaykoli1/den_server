@@ -28,7 +28,7 @@
   {% if popular %}
   <section class="section">
     <div class="section-head"><h2 class="h2">Popular</h2><span class="see-all">last 90 days</span></div>
-    <div class="hscroll">{% for i in popular %}{{ m.product_card(i, wide=True) }}{% endfor %}</div>
+    <div class="hscroll cafe-popular-list" aria-label="Popular cafe items">{% for i in popular %}{{ m.product_card(i, wide=True, stepper=True) }}{% endfor %}</div>
   </section>
   {% endif %}
   {% endif %}

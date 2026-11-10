@@ -2,7 +2,7 @@
 {% block title %}More{% endblock %}
 {% block topbar %}
 <header class="topbar">
-  <a href="/members/profile" class="row grow">{{ m.avatar(member.name, 'lg') }}<div class="grow"><div class="h2">{{ member.name }}</div><div class="small muted">{{ membership.planName or 'Pay as you play' }}{% if member.badge %} · {{ member.badge }}{% endif %} · member since {{ member.createdAt|dt('date') }}</div></div>{{ m.icon('chev') }}</a>
+  <a href="/members/profile" class="row grow">{{ m.avatar(member.name) }}<div class="grow"><div class="h2">{{ member.name }}</div><div class="small muted">{% if member.badge %}  {{ member.badge }}{% endif %} · member since {{ member.createdAt|dt('date') }}</div></div>{{ m.icon('chev') }}</a>
 </header>
 {% endblock %}
 {% block content %}
@@ -16,7 +16,7 @@
 
   {% set links = [
     ('/members/wallet', 'wallet', 'Wallet & dues', 'Balance, history, top-up'),
-    ('/members/orders', 'receipt', 'Orders & bills', 'Cafe & store purchases'),
+    ('/members/orders', 'receipt', 'Orders & bills', 'Cafe purchases'),
     ('/members/frames', 'table', 'My frames', stats.played ~ ' played · ' ~ stats.winRate ~ '% wins'),
     ('/members/rankings', 'trophy', 'Club rankings', 'Where you stand this quarter'),
     ('/members/tournaments', 'star', 'Events', 'Tournaments & registration'),
@@ -24,7 +24,7 @@
     ('/members/tables', 'clock', 'Live tables', tables_count ~ ' tables · rates'),
     ('/members/activity', 'activity', 'Activity', (unread ~ ' new') if unread else 'All caught up'),
   ] %}
-  <div class="list mt16">
+  <div class="list row-list mt16">
   {% for href, ic, t, s in links %}
     <a class="lrow" href="{{ href }}"><div class="ico">{{ m.icon(ic) }}</div><div class="grow"><div class="t">{{ t }}</div><div class="s">{{ s }}</div></div>{% if ic == 'activity' and unread %}<span class="badge live">{{ unread }}</span>{% endif %}<span class="chev">{{ m.icon('chev') }}</span></a>
   {% endfor %}
@@ -42,7 +42,7 @@
 
   <div class="card mt12 row between">
     <div class="row">{{ m.icon('moon') }}<span class="b">Dark mode</span></div>
-    <button class="btn xs soft" data-theme-toggle><span data-theme-label>{{ 'On' if theme == 'dark' else 'Off' }}</span></button>
+    <button class="btn xs soft" data-theme-toggle aria-label="Toggle dark theme"><span data-theme-label>{{ 'On' if theme == 'dark' else ('Off' if theme == 'light' else 'Auto') }}</span></button>
   </div>
 
   {% if memberships|length > 1 %}

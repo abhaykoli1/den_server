@@ -26,11 +26,15 @@
     if (d) {
       var due = Number(d.getAttribute("data-due")), wal = Number(d.getAttribute("data-wallet"));
       var max = Math.min(due, wal);
-      if (max <= 0) { toast(wal <= 0 ? "Your wallet is empty — top up first or pay at the counter" : "Nothing due", "bad"); return; }
+      var dueQr = DEN.qr ? '<img class="qr mt12" src="' + esc(DEN.qr) + '" alt="Club UPI payment QR">' : "";
+      var dueUpi = DEN.upiId ? '<div class="mt8"><span class="upi-id">' + esc(DEN.upiId) + ' <button class="link xs" data-copy="' + esc(DEN.upiId) + '">copy</button></span></div>' : "";
+      var manualDue = (dueQr || dueUpi) ? '<div class="card center mt12"><div class="h4">Pay ' + money(due) + ' by UPI</div><p class="hint mt4">Scan the club QR, then show your payment reference at the counter to clear your due.</p>' + dueQr + dueUpi + '</div>' : '<p class="hint center mt12">You can also pay cash / UPI at the counter.</p>';
+      if (due <= 0) { toast("Nothing due", "bad"); return; }
+      if (max <= 0) { openSheet('<div class="sh-title">Clear your tab</div><div class="sh-sub">Due ' + money(due) + ' · wallet ' + money(wal) + '</div>' + manualDue + '<button class="btn mt16" data-close>Okay</button>'); return; }
       openSheet('<div class="sh-title">Clear your tab</div><div class="sh-sub">Due ' + money(due) + ' · wallet ' + money(wal) + '</div>' +
         '<div class="field mt16"><label>Amount</label><input class="input" type="number" inputmode="decimal" id="due-amt" min="1" max="' + max + '" step="1" value="' + max + '"></div>' +
         '<div class="chips mt12" style="margin:12px 0 0"><button class="chip" data-amt="' + max + '">Max ' + money(max) + '</button>' + (max > 100 ? '<button class="chip" data-amt="100">₹100</button>' : "") + (max > 200 ? '<button class="chip" data-amt="200">₹200</button>' : "") + (max > 500 ? '<button class="chip" data-amt="500">₹500</button>' : "") + '</div>' +
-        '<button class="btn mt20" id="due-go">Pay from wallet</button><p class="hint center mt12">You can also pay cash / UPI at the counter.</p>', function (s) {
+        '<button class="btn mt20" id="due-go">Pay from wallet</button>' + manualDue, function (s) {
           $$("[data-amt]", s).forEach(function (c) { c.addEventListener("click", function () { $("#due-amt", s).value = c.getAttribute("data-amt"); }); });
           $("#due-go", s).addEventListener("click", function () {
             var v = Number($("#due-amt", s).value); if (!(v > 0) || v > max) { toast("Enter an amount up to " + money(max), "bad"); return; }
@@ -45,28 +49,41 @@
     if (t) {
       var offers = []; try { offers = JSON.parse(t.getAttribute("data-offers") || "[]"); } catch (er) { }
       var upi = DEN.upiId || "", qr = DEN.qr || "";
-      if (!upi && !qr) { openSheet('<div class="sh-title">Top up at the counter</div><div class="sh-sub">Online top-ups aren\'t enabled for this club yet — pay cash / UPI at the counter and the balance shows here instantly.</div><button class="btn mt20" data-close>Okay</button>'); return; }
+      if (!upi && !qr) {
+        /* A member may already have an updated QR even if this page shell
+           rendered before the club payment details were refreshed. */
+        api("GET", "/member-portal/payment-details").then(function (details) {
+          DEN.upiId = details.upiId || ""; DEN.qr = details.qrCode || "";
+          DEN.clubName = details.clubName || DEN.clubName;
+          if (DEN.upiId || DEN.qr) { t.dispatchEvent(new MouseEvent("click", { bubbles: true })); return; }
+          openSheet('<div class="sh-title">Top up at the counter</div><div class="sh-sub">This club has not added a payment QR or UPI ID yet. You can pay at the counter and your balance will update here.</div><button class="btn mt20" data-close>Okay</button>');
+        }).catch(function () { openSheet('<div class="sh-title">Top up at the counter</div><div class="sh-sub">Payment details could not be loaded. Please pay at the counter and your balance will update here.</div><button class="btn mt20" data-close>Okay</button>'); });
+        return;
+      }
       var preset = Number(t.getAttribute("data-amount") || 0) || (offers[0] ? offers[0].amount : 500);
+      var initialPlanId = t.getAttribute("data-plan-id") || "";
+      var selectedPlan = offers.filter(function (o) { return o.id === initialPlanId; })[0] || null;
       openSheet('<div class="sh-title">Top up wallet</div><div class="sh-sub">Pay on UPI, then enter the reference — the counter confirms and your balance updates.</div>' +
-        (offers.length ? '<div class="list mt16">' + offers.map(function (o) { return '<button class="choice" data-off="' + o.amount + '"><div><div class="t">' + esc(o.name) + ' · ' + money(o.amount) + '</div><div class="s">' + esc(o.benefit) + '</div></div><span class="box"></span></button>'; }).join("") + '</div>' : "") +
+        (offers.length ? '<div class="list mt16">' + offers.map(function (o) { return '<button class="choice' + (selectedPlan && selectedPlan.id === o.id ? ' on' : '') + '" data-off="' + o.amount + '" data-plan="' + esc(o.id) + '"><div><div class="t">' + esc(o.name) + ' · ' + money(o.amount) + '</div><div class="s">' + esc(o.benefit) + '</div></div><span class="box"></span></button>'; }).join("") + '</div>' : "") +
         '<div class="field mt12"><label>Amount</label><input class="input" type="number" inputmode="numeric" id="tu-amt" min="50" step="50" value="' + preset + '"></div>' +
         '<div class="card mt12 center" id="tu-pay"></div>' +
         '<div class="field mt12"><label>UPI reference / UTR</label><input class="input" id="tu-utr" placeholder="e.g. 3241 5678 9012" autocomplete="off"></div>' +
         '<button class="btn mt16" id="tu-go">Submit for confirmation</button>', function (s) {
+          var selectedPlanId = initialPlanId;
           function draw() {
             var v = Number($("#tu-amt", s).value) || 0; var box = $("#tu-pay", s);
             box.innerHTML = (qr ? '<img class="qr" src="' + qr + '" alt="Club UPI QR">' : "") + (upi ? '<div class="mt12"><span class="upi-id">' + esc(upi) + ' <button class="link xs" data-copy="' + esc(upi) + '">copy</button></span></div><a class="btn sm mt12 auto" href="upi://pay?pa=' + encodeURIComponent(upi) + '&pn=' + encodeURIComponent(DEN.clubName || "Club") + '&am=' + v.toFixed(2) + '&cu=INR&tn=' + encodeURIComponent("Wallet top-up " + (DEN.memberName || "")) + '">Pay ' + money(v) + ' with any UPI app</a>' : "");
             $$("[data-copy]", box).forEach(function (b) { b.addEventListener("click", function () { navigator.clipboard && navigator.clipboard.writeText(b.getAttribute("data-copy")); toast("UPI ID copied", "ok", 1200); }); });
-            $$("[data-off]", s).forEach(function (c) { c.classList.toggle("on", Number(c.getAttribute("data-off")) === v); });
+            $$("[data-off]", s).forEach(function (c) { c.classList.toggle("on", c.getAttribute("data-plan") === selectedPlanId); });
           }
-          $$("[data-off]", s).forEach(function (c) { c.addEventListener("click", function () { $("#tu-amt", s).value = c.getAttribute("data-off"); draw(); }); });
-          $("#tu-amt", s).addEventListener("input", draw); draw();
+          $$("[data-off]", s).forEach(function (c) { c.addEventListener("click", function () { selectedPlanId = c.getAttribute("data-plan") || ""; $("#tu-amt", s).value = c.getAttribute("data-off"); draw(); }); });
+          $("#tu-amt", s).addEventListener("input", function () { selectedPlanId = ""; draw(); }); draw();
           $("#tu-go", s).addEventListener("click", function () {
             var v = Number($("#tu-amt", s).value), utr = $("#tu-utr", s).value.trim();
             if (!(v >= 50)) { toast("Minimum top-up is ₹50", "bad"); return; }
             if (utr.length < 4) { toast("Enter the UPI reference number", "bad"); $("#tu-utr", s).focus(); return; }
             busy(this, true);
-            api("POST", "/member-portal/wallet/topup-requests", { amount: v, utr: utr }).then(function (r) { closeSheet(); toast(r.message, "ok", 3500); setTimeout(function () { location.reload(); }, 800); }).catch(function (err) { busy($("#tu-go", s), false); toast(err.message, "bad", 4000); });
+            api("POST", "/member-portal/wallet/topup-requests", { amount: v, utr: utr, planId: selectedPlanId || null }).then(function (r) { closeSheet(); toast(r.message, "ok", 3500); setTimeout(function () { location.reload(); }, 800); }).catch(function (err) { busy($("#tu-go", s), false); toast(err.message, "bad", 4000); });
           });
         });
     }
@@ -102,11 +119,16 @@
     var jt = e.target.closest("[data-join]");
     if (jt) {
       var tid = jt.getAttribute("data-join"), fee = Number(jt.getAttribute("data-fee") || 0), wal3 = Number(DEN.wallet || 0), tname = jt.getAttribute("data-name") || "the event";
+      var tourQr = DEN.qr ? '<img class="qr mt12" src="' + esc(DEN.qr) + '" alt="Club UPI payment QR">' : "";
+      var tourUpi = DEN.upiId ? '<div class="mt8"><span class="upi-id">' + esc(DEN.upiId) + ' <button class="link xs" data-copy="' + esc(DEN.upiId) + '">copy</button></span></div>' : "";
+      var tourPayment = (tourQr || tourUpi) ? '<div class="card center mt12" id="jn-upi" hidden><div class="h4">Pay entry fee ' + money(fee) + ' by UPI</div><p class="hint mt4">Scan the club QR, then show the payment reference at the counter before the event.</p>' + tourQr + tourUpi + '</div>' : "";
       openSheet('<div class="sh-title">Register for ' + esc(tname) + '</div><div class="sh-sub">' + (fee > 0 ? "Entry fee " + money(fee) : "Free entry") + '</div>' +
-        (fee > 0 ? '<div class="list mt16"><button class="choice ' + (wal3 >= fee ? "on" : "off") + '" data-jm="wallet"><div><div class="t">Pay entry from wallet</div><div class="s">Balance ' + money(wal3) + '</div></div><span class="box"></span></button><button class="choice ' + (wal3 >= fee ? "" : "on") + '" data-jm="counter"><div><div class="t">Pay at the counter</div><div class="s">Your spot is held · pay before the event</div></div><span class="box"></span></button></div>' : "") +
+        (fee > 0 ? '<div class="list mt16"><button class="choice ' + (wal3 >= fee ? "on" : "off") + '" data-jm="wallet"><div><div class="t">Pay entry from wallet</div><div class="s">Balance ' + money(wal3) + '</div></div><span class="box"></span></button><button class="choice ' + (wal3 >= fee ? "" : "on") + '" data-jm="counter"><div><div class="t">Pay at the counter</div><div class="s">Your spot is held · pay before the event</div></div><span class="box"></span></button></div>' + tourPayment : "") +
         '<button class="btn mt16" id="jn-go">Confirm registration</button>', function (s) {
           var jm = fee > 0 ? (wal3 >= fee ? "wallet" : "counter") : "counter";
-          $$("[data-jm]", s).forEach(function (c) { c.addEventListener("click", function () { if (c.classList.contains("off")) return; jm = c.getAttribute("data-jm"); $$("[data-jm]", s).forEach(function (x) { x.classList.toggle("on", x === c); }); }); });
+          function drawTournamentPay() { $$("[data-jm]", s).forEach(function (x) { x.classList.toggle("on", x.getAttribute("data-jm") === jm); }); var info = $("#jn-upi", s); if (info) info.hidden = jm !== "counter"; }
+          $$("[data-jm]", s).forEach(function (c) { c.addEventListener("click", function () { if (c.classList.contains("off")) return; jm = c.getAttribute("data-jm"); drawTournamentPay(); }); });
+          drawTournamentPay();
           $("#jn-go", s).addEventListener("click", function () { busy(this, true); api("POST", "/member-portal/tournaments/" + tid + "/join", { mode: jm }).then(function (r) { closeSheet(); toast(r.message, "ok", 3500); setTimeout(function () { location.reload(); }, 800); }).catch(function (err) { busy($("#jn-go", s), false); toast(err.message, "bad", 4000); }); });
         });
     }

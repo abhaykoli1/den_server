@@ -27,6 +27,53 @@ async def list_frames(club_id: str, user: dict = Depends(current_user)):
     return frames
 
 
+@router.delete("/{frame_id}")
+async def delete_frame(club_id: str, frame_id: str, user: dict = Depends(current_user)):
+    """Delete an unpaid frame after reversing its member and payment effects."""
+    club = await get_club(user, club_id)
+    await billing_gate(user, club)
+    db = await db_mod.get_db()
+    frame = await db.frames.find_one({"id": frame_id, "clubId": club["id"]})
+    if not frame:
+        raise HTTPException(404, "Frame not found")
+
+    frame_web_aliases(frame)
+    settlements = frame.get("settlements") or []
+    has_collected_cash = (
+        money(frame.get("cashCollected") or 0) > 0
+        or money(frame.get("oldDueNow") or 0) > 0
+        or money(frame.get("advancePaid") or 0) > 0
+        or money(frame.get("advanceUsed") or 0) > 0
+        or any(
+            money(line.get("cashPart") or 0) > 0
+            or money(line.get("oldDuePart") or 0) > 0
+            or money(line.get("externalPaidPart") or 0) > 0
+            for line in settlements
+        )
+    )
+    has_written_off_due = (
+        frame.get("status") == "written_off"
+        or money(frame.get("writtenOffAmount") or 0) > 0
+        or any(money(line.get("writtenOffPart") or 0) > 0 for line in settlements)
+    )
+    if has_collected_cash or has_written_off_due:
+        raise HTTPException(
+            400,
+            "This frame has collected cash/advance or written-off dues — correct it instead of deleting",
+        )
+
+    await reverse_frame(db, frame)
+    await db.frames.delete_one({"id": frame_id, "clubId": club["id"]})
+    await write_log(
+        club["id"], "WARNING",
+        f"Frame deleted · {frame.get('tableName', '')} · "
+        f"{', '.join(frame.get('winners') or []) or 'no winner'} · "
+        f"₹{fmt(frame.get('frameAmount') or frame.get('totalAmount') or 0)}",
+        actor=user.get("name", ""), ref_type="frame", ref_id=frame_id,
+    )
+    return {"ok": True, "message": "Frame deleted and settlement reversed"}
+
+
 @router.patch("/{frame_id}/winners")
 async def correct_winners(club_id: str, frame_id: str, payload: WinnersPatchIn,
                           user: dict = Depends(current_user)):
@@ -66,9 +113,15 @@ async def correct_winners(club_id: str, frame_id: str, payload: WinnersPatchIn,
         "items": frame.get("items") or [], "gloves": frame.get("gloves") or [],
         "advancePaid": frame.get("advancePaid", 0), "players": frame["players"],
     }
+    advance_left = max(0.0, money(frame.get("advancePaid", 0) - frame.get("advanceUsed", 0)))
+    old_due_cash = frame.get("oldDueNow")
+    if old_due_cash is None:
+        old_due_cash = max(0.0, money(frame.get("oldDueAmount", 0) - advance_left))
     calc = compute_bill(pseudo, club, members_map, losers, winners,
-                        frame.get("discount", 0), frame.get("cashCollected", 0),
-                        use_pass)
+                        frame.get("discount", 0),
+                        money(frame.get("cashCollected", 0) + old_due_cash),
+                        use_pass,
+                        include_old_due=bool(frame.get("oldDueIncluded", frame.get("oldDueAmount", 0) > 0)))
 
     # 4) apply new settlements
     for line in calc["settlements"]:
@@ -138,6 +191,10 @@ async def correct_winners(club_id: str, frame_id: str, payload: WinnersPatchIn,
         "settlements": calc["settlements"], "passApplied": calc["passApplied"],
         "winnerCredits": winner_credits, "advanceUsed": calc["advanceUsed"],
         "cashCollected": calc["collectedNow"],
+        "oldDueNow": calc.get("oldDueNow", 0),
+        "oldDueIncluded": calc.get("oldDueIncluded", False),
+        "oldDueIncludedAmount": calc.get("oldDueIncludedAmount", 0),
+        "oldDueIncludedByMember": calc.get("oldDueIncludedByMember", {}),
         "correctedAt": now_iso(), "correctedBy": user.get("name", ""),
     }
     # web alias set re-derive (old-due harvest bhi naye pool se dobara hua)

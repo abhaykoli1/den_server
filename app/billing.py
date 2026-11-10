@@ -44,6 +44,18 @@ def table_amount(hourly: float, minutes: int, min_charge: float) -> float:
     return max(money(min_charge or 0), money(hourly / 60 * minutes))
 
 
+def session_table_amount(session: dict, minutes: int, units_played: int = None) -> float:
+    mode = session.get("billingMode", "hourly")
+    rate = float(session.get("hourlyRate", 0))
+    minimum = float(session.get("minCharge", 0) or 0)
+    if mode == "hourly":
+        return table_amount(rate, minutes, minimum)
+    units = max(1, int(units_played or session.get("unitsPlayed", 1) or 1))
+    if mode == "flat":
+        units = 1
+    return max(money(minimum), money(rate * units))
+
+
 def _expired(m: dict) -> bool:
     exp = m.get("planExpiresAt")
     if not exp:
@@ -98,12 +110,13 @@ def resolve_sides(players: list, match_mode: str, winners: list, winning_team, s
 
 
 def compute_bill(session: dict, club: dict, members_map: dict, losers: list,
-                 winners: list, discount: float, cash_paid: float, use_pass: list):
+                 winners: list, discount: float, cash_paid: float, use_pass: list,
+                 units_played: int = None, include_old_due: bool = False):
     """Pure math + validation. Raises 400 BEFORE anything is locked/mutated."""
     minutes = ceil_minutes(session["startedAt"], session["endedAt"])
     hourly = float(session.get("hourlyRate", 0))
     min_charge = float(session.get("minCharge", 0) or 0)
-    t_amt = table_amount(hourly, minutes, min_charge)
+    t_amt = session_table_amount(session, minutes, units_played)
 
     items = session.get("items") or []
     items_amt = money(sum(i.get("amount", 0) for i in items))
@@ -122,6 +135,20 @@ def compute_bill(session: dict, club: dict, members_map: dict, losers: list,
     d_sh = split_evenly(discount or 0, n)
     g_sh = split_evenly(glove_amt, n)
 
+    settings = club.get("settings") or {}
+    tax_enabled = session.get("taxEnabled", settings.get("taxEnabled", False))
+    tax_rate = float(session.get("taxRate", settings.get("taxRate", 0)) or 0) if tax_enabled else 0.0
+    member_discounts = []
+    for player, table_share in zip(losers, t_sh):
+        member = members_map.get(player.get("memberId") or "")
+        pct = membership_pct(member, club) if member else 0.0
+        member_discounts.append(money(table_share * pct / 100))
+    member_discount_estimate = money(sum(member_discounts))
+    taxable_amount = money(max(0.0, t_amt + items_amt + glove_amt + wb
+                               - money(discount or 0) - member_discount_estimate))
+    tax_amount = money(taxable_amount * tax_rate / 100)
+    tax_shares = split_evenly(tax_amount, n)
+
     pass_set = set(use_pass or [])
     payer_member_ids = {p.get("memberId") for p in losers if p.get("memberId")}
     if pass_set - payer_member_ids:
@@ -129,7 +156,6 @@ def compute_bill(session: dict, club: dict, members_map: dict, losers: list,
     advance = float(session.get("advancePaid", 0) or 0)
     cash_pool = money(advance + (cash_paid or 0))
 
-    settings = club.get("settings") or {}
     due_limit = float(settings.get("dueLimit", 0) or 0)
 
     lines, mem_discount_total, dues_over = [], 0.0, []
@@ -143,12 +169,13 @@ def compute_bill(session: dict, club: dict, members_map: dict, losers: list,
             membership_applied.append({"memberId": member["id"], "name": member["name"],
                                        "percent": pct})
         charge = money(max(0.0, t_sh[idx] - m_disc - d_sh[idx]) + i_sh[idx]
-                       + wb_sh[idx] + g_sh[idx])
+                       + wb_sh[idx] + g_sh[idx] + tax_shares[idx])
         line = {
             "pid": p["pid"], "label": p["label"], "memberId": p.get("memberId"),
             "name": p["label"], "playerName": p["label"],  # web aliases
             "memberName": member["name"] if member else p["label"],  # web settlementLine
             "charge": charge, "membershipDiscount": m_disc,
+            "taxPart": tax_shares[idx],
             "walletPart": 0.0, "passPart": 0.0, "cashPart": 0.0, "duePart": 0.0,
             "oldDuePart": 0.0,
         }
@@ -187,31 +214,40 @@ def compute_bill(session: dict, club: dict, members_map: dict, losers: list,
     advance_used = money(min(advance, cash_used))
     collected_now = money(cash_used - advance_used)
 
-    # --- old-due harvest ---------------------------------------------------
+    # --- optional old-due harvest -----------------------------------------
     # Web FinalBillCard ka estimate `frameAmount + oldDue` hota hai aur
     # cashPaid me losers ke PURANE dues bhi shamil aate hain. Frame-share
     # cover hone ke baad jo pool bachta hai wo losers ke old dues chhooota
     # karta hai — warna wo paisa "extra held" note me kho jata tha aur
     # Day Close hamesha short dikhta tha (MONEY LEAK fix).
-    old_due_before: dict = {}
     old_due_paid: dict = {}
-    for line in lines:
-        if cash_pool <= 0:
-            break
-        mid = line.get("memberId")
-        member = members_map.get(mid or "")
-        if not member:
-            continue
-        pending = money(member.get("dueAmount") or 0)
-        if pending <= 0:
-            continue
-        old_due_before.setdefault(mid, pending)
-        pay = money(min(pending - money(old_due_paid.get(mid, 0.0)), cash_pool))
-        if pay <= 0:
-            continue
-        line["oldDuePart"] = money(line["oldDuePart"] + pay)
-        old_due_paid[mid] = money(old_due_paid.get(mid, 0.0) + pay)
-        cash_pool = money(cash_pool - pay)
+    old_due_included_by_member = {}
+    if include_old_due:
+        included_member_ids = {p.get("memberId") for p in losers if p.get("memberId")}
+        old_due_included_by_member = {
+            mid: money((members_map.get(mid) or {}).get("dueAmount") or 0)
+            for mid in included_member_ids
+        }
+    old_due_included_amount = money(sum(old_due_included_by_member.values()))
+    old_due_before = dict(old_due_included_by_member)
+    if include_old_due:
+        for line in lines:
+            if cash_pool <= 0:
+                break
+            mid = line.get("memberId")
+            member = members_map.get(mid or "")
+            if not member:
+                continue
+            pending = money(member.get("dueAmount") or 0)
+            if pending <= 0:
+                continue
+            old_due_before.setdefault(mid, pending)
+            pay = money(min(pending - money(old_due_paid.get(mid, 0.0)), cash_pool))
+            if pay <= 0:
+                continue
+            line["oldDuePart"] = money(line["oldDuePart"] + pay)
+            old_due_paid[mid] = money(old_due_paid.get(mid, 0.0) + pay)
+            cash_pool = money(cash_pool - pay)
     old_due_amount = money(sum(old_due_paid.values()))
     # Advance-funded harvest pahle hi ledger me gina ja chuka hai (advance
     # collect-time pe "frames" book hota hai) — sirf AB aaya cash "due"
@@ -235,7 +271,11 @@ def compute_bill(session: dict, club: dict, members_map: dict, losers: list,
 
     return {
         "minutes": minutes, "hourlyRate": hourly, "minCharge": min_charge,
+        "billingMode": session.get("billingMode", "hourly"),
+        "unitsPlayed": 1 if session.get("billingMode") == "flat" else max(1, int(units_played or session.get("unitsPlayed", 1) or 1)),
         "tableAmount": t_amt, "itemsAmount": items_amt, "items": items,
+        "taxableAmount": taxable_amount, "taxAmount": tax_amount, "taxRate": tax_rate,
+        "taxLabel": session.get("taxLabel") or settings.get("taxLabel") or "Tax",
         "membershipDiscount": money(mem_discount_total),
         "winnerBonus": wb, "discount": money(discount or 0),
         "gloves": gloves, "gloveCharges": glove_amt,
@@ -249,6 +289,9 @@ def compute_bill(session: dict, club: dict, members_map: dict, losers: list,
         "membershipApplied": membership_applied,
         "advanceUsed": advance_used, "collectedNow": collected_now,
         "oldDueAmount": old_due_amount, "oldDueNow": due_now,
+        "oldDueIncluded": bool(include_old_due),
+        "oldDueIncludedAmount": old_due_included_amount,
+        "oldDueIncludedByMember": old_due_included_by_member,
         "oldDueBefore": old_due_before, "oldDuePaid": old_due_paid,
         "cashPoolLeft": leftover, "notes": notes,
     }
@@ -262,19 +305,22 @@ def calc_web_aliases(calc: dict, winners: list, losers: list,
     lines = calc.get("settlements") or []
     frame_amount = money(calc.get("frameAmount") or 0)
     old_due = money(calc.get("oldDueAmount") or 0)
+    old_due_included = money(calc.get("oldDueIncludedAmount") or 0)
     paid = money(sum(money(l.get("walletPart") or 0) + money(l.get("passPart") or 0) +
                      money(l.get("cashPart") or 0) + money(l.get("oldDuePart") or 0)
                      for l in lines))
-    due = money(sum(money(l.get("duePart") or 0) for l in lines))
+    due = money(sum(money(l.get("duePart") or 0) for l in lines)
+                + max(0.0, old_due_included - old_due))
     passes = calc.get("passApplied") or []
     memb = calc.get("membershipApplied") or []
     out = {
-        "totalAmount": money(frame_amount + old_due),
+        "totalAmount": money(frame_amount + (old_due_included if calc.get("oldDueIncluded") else old_due)),
         "paidAmount": paid, "dueAmount": due,
         "status": "paid" if due <= 0 else ("partial" if paid > 0 else "unpaid"),
         "winnerPlayerIds": [w["pid"] for w in winners],
         "loserPlayerIds": [l["pid"] for l in losers],
         "oldDueAmount": old_due,
+        "oldDueIncludedAmount": old_due_included,
         "oldDueBefore": dict(calc.get("oldDueBefore") or {}),
         "oldDuePaid": dict(calc.get("oldDuePaid") or {}),
         "passTableCredit": money(sum(p.get("covers") or 0 for p in passes)),

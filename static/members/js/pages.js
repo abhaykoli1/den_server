@@ -10,6 +10,21 @@
       openSheet = U.openSheet, closeSheet = U.closeSheet, Cart = U.Cart;
   var CART_KEY = "den.cart." + (DEN.clubId || "x");
 
+  /* Open the wallet only when the card background is clicked; controls act independently. */
+  var walletCard = $("[data-wallet-card]");
+  if (walletCard) {
+    walletCard.addEventListener("click", function (e) {
+      if (e.target.closest("a, button, input, select, textarea")) return;
+      location.href = "/members/wallet";
+    });
+    walletCard.addEventListener("keydown", function (e) {
+      if ((e.key === "Enter" || e.key === " ") && e.target === walletCard) {
+        e.preventDefault();
+        location.href = "/members/wallet";
+      }
+    });
+  }
+
   /* ------------------------------------------------------------ live timers + polling */
   var serverOffset = DEN.serverNow ? (Date.now() - Date.parse(DEN.serverNow)) : 0;
   function fmtElapsed(startIso) {
@@ -76,7 +91,7 @@
     function total() { return lines().reduce(function (s, l) { return s + l.price * l.qty; }, 0); }
     function renderCart() {
       var ls = lines(), t = total(), list = $("[data-cart-lines]");
-      if (!ls.length) { list.innerHTML = '<div class="empty"><div class="e">🛒</div><div class="t">Your cart is empty</div><div class="small mt4">Add something from the cafe or the store.</div><div class="row mt16 gap8" style="justify-content:center"><a class="btn sm light" href="/members/cafe">Cafe</a><a class="btn sm light" href="/members/shop">Store</a></div></div>'; $("[data-checkout]").hidden = true; return; }
+      if (!ls.length) { list.innerHTML = '<div class="empty"><div class="e">🛒</div><div class="t">Your cart is empty</div><div class="small mt4">Add something from the cafe.</div><div class="row mt16 gap8" style="justify-content:center"><a class="btn sm light" href="/members/cafe">Browse cafe</a></div></div>'; $("[data-checkout]").hidden = true; return; }
       $("[data-checkout]").hidden = false;
       list.innerHTML = ls.map(function (l) {
         var th = l.image ? '<img src="' + l.image + '" alt="">' : '<span>' + (l.emoji || "🛍️") + '</span>';
@@ -213,7 +228,7 @@
     draw();
   }
 
-  /* ------------------------------------------------------------ home segment filter (Popular / Cafe / Store) */
+  /* ------------------------------------------------------------ home segment filter (Popular / Cafe) */
   var hs = $("[data-home-seg]");
   if (hs) {
     hs.addEventListener("tab", function (e) { $$("[data-home-grid] .pcard").forEach(function (c) { var k = c.getAttribute("data-kind"), pop = c.hasAttribute("data-popular"); c.hidden = e.detail === "popular" ? !pop : k !== e.detail; }); });

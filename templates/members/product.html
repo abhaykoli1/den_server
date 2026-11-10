@@ -1,5 +1,5 @@
 {% extends "members/base.html" %}
-{% set back = '/members/cafe' if item.kind == 'cafe' else '/members/shop' %}
+{% set back = '/members/cafe' %}
 {% set nav = False %}
 {% block title %}{{ item.name }}{% endblock %}
 {% block appclass %}has-sticky{% endblock %}

@@ -59,6 +59,23 @@ python3 -m pytest tests -q    # 34 tests · 247 checks (billing rules, walls, re
 Demo logins (dev auth): `owner@rowdys.dev` (Raju Bhai) · `master@rowdys.dev`
 (Master Boss) · `staff2@rowdys.dev` (Abhay Koli — staff via Master panel).
 
+## Seller subscriptions and production
+
+Seller plans are created when the backend starts with `APP_ENV=production`:
+Starter ₹499/month or ₹4,999/year (1 club), Pro ₹999/month or ₹9,999/year
+(3 clubs), and Business ₹1,999/month or ₹19,999/year (10 clubs). Existing
+administrator-edited plans are preserved. The development seed uses the same
+catalog. Owners can request a plan; Master Admin activates paid plans manually.
+No online payment gateway is configured.
+
+Before deploying, set `APP_ENV=production`, `AUTH_DEV_MODE=false`,
+`AUTH_DISABLED=false`, a unique 32+ character `JWT_SECRET`, Atlas
+`MONGODB_URI`, `GOOGLE_CLIENT_ID`, real `MASTER_ADMIN_EMAILS`, HTTPS-only
+`CORS_ORIGINS`, and the public HTTPS `APP_PUBLIC_URL`. Production startup
+rejects demo authentication/database settings. Configure SMTP separately if
+subscription and account emails must be delivered; without SMTP, messages are
+recorded for review in Master Admin.
+
 ## Your `.env` (already in place)
 
 - Real Atlas cluster (`MONGODB_URI=mongodb+srv://…rowdysden.xfypy3m…`) + `MONGODB_DB=rowdys_den`

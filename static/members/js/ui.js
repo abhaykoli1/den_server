@@ -106,7 +106,16 @@
       $$("[data-cart-count]").forEach(function (el) { el.textContent = n; el.hidden = n === 0; });
       $$("[data-cart-add]").forEach(function (btn) {
         var id = btn.getAttribute("data-cart-add"); var q = Cart.qty(id);
-        if (btn.classList.contains("add")) { btn.classList.toggle("in", q > 0); btn.innerHTML = q > 0 ? (q + ' <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>') : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'; }
+        var stepper = btn.closest("[data-cart-stepper]");
+        if (stepper) {
+          stepper.classList.toggle("in", q > 0);
+          $("[data-cart-qty]", stepper).textContent = q;
+          $("[data-cart-qty]", stepper).hidden = q === 0;
+          $("[data-cart-remove]", stepper).hidden = q === 0;
+        } else if (btn.classList.contains("add")) {
+          btn.classList.toggle("in", q > 0);
+          btn.innerHTML = q > 0 ? (q + ' <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>') : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+        }
       });
     }
   };
@@ -114,6 +123,13 @@
   window.Cart = Cart;
 
   document.addEventListener("click", function (e) {
+    var remove = e.target.closest("[data-cart-remove]");
+    if (remove) {
+      e.preventDefault(); e.stopPropagation();
+      var removeId = remove.getAttribute("data-cart-remove");
+      Cart.set(removeId, Cart.qty(removeId) - 1);
+      return;
+    }
     var add = e.target.closest("[data-cart-add]");
     if (add) {
       e.preventDefault(); e.stopPropagation();
@@ -143,11 +159,14 @@
   /* ------------------------------------------------------------ theme */
   $$("[data-theme-toggle]").forEach(function (b) {
     b.addEventListener("click", function () {
-      var cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-      var next = cur === "dark" ? "light" : "dark";
+      var cur = document.documentElement.getAttribute("data-theme") || "system";
+      var systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var next = cur === "system" ? (systemDark ? "light" : "dark") : (cur === "dark" ? "light" : "dark");
       document.documentElement.setAttribute("data-theme", next);
       var fd = new FormData(); fd.append("theme", next);
-      fetch("/members/theme", { method: "POST", body: fd, credentials: "same-origin" });
+      fetch("/members/theme", { method: "POST", body: fd, credentials: "same-origin" }).then(function (response) {
+        if (!response.ok) throw new Error("Theme preference could not be saved.");
+      }).catch(function () { toast("Theme changed, but your preference could not be saved.", "bad"); });
       b.querySelector("[data-theme-label]") && (b.querySelector("[data-theme-label]").textContent = next === "dark" ? "On" : "Off");
     });
   });
@@ -160,13 +179,25 @@
       else { navigator.clipboard && navigator.clipboard.writeText(data.text + " " + data.url); toast("Copied to clipboard", "ok"); }
     });
   });
-  $$("[data-copy]").forEach(function (b) {
-    b.addEventListener("click", function () { navigator.clipboard && navigator.clipboard.writeText(b.getAttribute("data-copy")); toast("Copied", "ok", 1200); });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-copy]");
+    if (!b) return;
+    navigator.clipboard && navigator.clipboard.writeText(b.getAttribute("data-copy"));
+    toast("Copied", "ok", 1200);
   });
 
   /* ------------------------------------------------------------ install prompt */
   var deferredPrompt; window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); deferredPrompt = e; $$("[data-install]").forEach(function (b) { b.hidden = false; }); });
-  $$("[data-install]").forEach(function (b) { b.addEventListener("click", function () { if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt = null; b.hidden = true; } else toast("Use your browser menu → Add to Home Screen", "", 3500); }); });
+  $$("[data-install]").forEach(function (b) { b.addEventListener("click", function () {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt = null;
+      b.hidden = true;
+      return;
+    }
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    toast(ios ? "Tap Share, then choose Add to Home Screen" : "Open your browser menu and choose Install app or Add to Home Screen", "", 4500);
+  }); });
 
   Cart.render();
 

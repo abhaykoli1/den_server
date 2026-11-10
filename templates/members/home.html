@@ -13,14 +13,45 @@
 {% endblock %}
 {% block content %}
 <div class="fade-in">
-  <div class="h1 mt12">Let's play.</div>
+  <div class="home-intro mt12">
+    <div class="h1">Let's play.</div>
+    <form class="search home-search" action="/members/cafe" method="get" role="search">
+    {{ m.icon('search') }}<input name="q" placeholder="Search cafe" aria-label="Search cafe">
+    </form>
+  </div>
 
-  <form class="search mt16" action="/members/shop" method="get" role="search">
-    {{ m.icon('search') }}<input name="q" placeholder="Search cafe & store" aria-label="Search cafe and store">
-  </form>
+  {% if home.rankings %}
+  <section class="home-rankings">
+    <div class="section-head"><h2 class="h2">Top rankings</h2><a class="see-all" href="/members/rankings">See all</a></div>
+    {% set top_rankings = home.rankings[:3] %}
+    {% if top_rankings|length == 3 %}
+    <div class="podium">
+      {% for r in [top_rankings[1], top_rankings[0], top_rankings[2]] %}
+      <a class="p {{ 'first' if loop.index == 2 }}" href="/members/rankings">
+        <div class="rank">{{ ['🥈','🥇','🥉'][loop.index0] }}</div>
+        {{ m.avatar(r.name, 'lg' if loop.index == 2 else '') }}
+        <div class="n ellipsis">{{ 'You' if r.isMe else r.name.split(' ')[0] }}</div>
+        <div class="w">{{ r.won }}W · {{ r.winRate }}%</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="list row-list">
+      {% for r in top_rankings %}
+      <a class="lrow {{ 'is-me' if r.isMe }}" href="/members/rankings">
+        <span class="b" style="width:22px;text-align:center">{{ r.rank }}</span>
+        {{ m.avatar(r.name) }}
+        <div class="grow"><div class="t">{{ r.name }}{% if r.isMe %} <span class="badge brand">you</span>{% endif %}</div><div class="s">{{ r.frames }} frames</div></div>
+        <div class="right"><div class="amt">{{ r.won }}W {{ r.lost }}L</div><div class="xs muted">{{ r.winRate }}%</div></div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
 
   {# wallet / dues strip #}
-  <div class="wallet mt16">
+  <div class="wallet mt16" data-wallet-card tabindex="0" role="link" aria-label="Open wallet">
     <div class="row between">
       <div>
         <div class="lbl">Wallet balance</div>
@@ -35,8 +66,8 @@
       {% if home.pendingRequests %}<span class="pill">⏳ {{ home.pendingRequests|length }} pending</span>{% endif %}
     </div>
     <div class="actions">
-      <a class="btn w" href="/members/wallet" data-topup data-offers='{{ [] | tojson_safe }}'>Top up</a>
-      {% if member.dueAmount > 0 %}<a class="btn g" href="/members/wallet?tab=dues">Clear dues</a>{% else %}<a class="btn g" href="/members/bookings?tab=new">Book a table</a>{% endif %}
+      <a class="btn w" href="/members/wallet?tab=plans">Top up</a>
+      {% if member.dueAmount > 0 %}<button class="btn g" type="button" data-pay-due data-due="{{ member.dueAmount }}" data-wallet="{{ member.walletBalance }}">Clear dues</button>{% else %}<a class="btn g" href="/members/bookings?tab=new">Book a table</a>{% endif %}
     </div>
   </div>
 
@@ -44,7 +75,6 @@
   <div class="tiles mt16">
     <a class="tile" href="/members/tables"><span class="n">{{ home.liveCount }} live</span>{{ m.icon('table') }}<span class="t">Tables</span></a>
     <a class="tile" href="/members/cafe">{{ m.icon('cafe') }}<span class="t">Cafe</span></a>
-    <a class="tile" href="/members/shop">{{ m.icon('shop') }}<span class="t">Pro shop</span></a>
     <a class="tile" href="/members/bookings?tab=new">{{ m.icon('calendar') }}<span class="t">Book</span></a>
     <a class="tile" href="/members/frames"><span class="n">{{ home.stats.winRate }}% wins</span>{{ m.icon('trophy') }}<span class="t">My frames</span></a>
     <a class="tile dark" href="/members/tournaments">{{ m.icon('star') }}<span class="t">Events</span></a>
@@ -71,26 +101,6 @@
     <div class="hscroll">{% for t in home.tables %}{{ m.table_card(t) }}{% endfor %}</div>
   </section>
 
-  {# hero #}
-  <section class="section">
-    <a class="hero dots" href="/members/shop?tab=new">
-      <img src="/members/static/members/demo/hero-club.jpg" alt="">
-      <span class="shade"></span>
-      <div class="txt"><div class="big">Discover<br>what's new</div><div class="sub">Fresh cues, tips & club merch in the pro shop</div><span class="cta">Shop new arrivals {{ m.icon('chev') }}</span></div>
-    </a>
-  </section>
-
-  {# popular / cafe / store segmented #}
-  <section class="section">
-    <div class="section-head"><h2 class="h2">Order in</h2><a class="see-all" href="/members/cart">Cart</a></div>
-    <div class="seg" data-tabs="home" data-home-seg><button class="on" data-tab="popular">Popular</button><button data-tab="cafe">Cafe</button><button data-tab="shop">Store</button></div>
-    <div class="grid2 mt12" data-home-grid>
-      {% for i in home.popular %}{{ m.product_card(i) }}{% endfor %}
-      {% for i in home.cafe %}{% if i not in home.popular %}{{ m.product_card(i) }}{% endif %}{% endfor %}
-      {% for i in home.shop %}{% if i not in home.popular %}{{ m.product_card(i) }}{% endif %}{% endfor %}
-    </div>
-  </section>
-
   {# tournaments #}
   {% if home.tournaments %}
   <section class="section">
@@ -108,7 +118,7 @@
   {# recent activity summary #}
   <section class="section">
     <div class="section-head"><h2 class="h2">Recent</h2><a class="see-all" href="/members/frames">Frames</a></div>
-    <div class="list">
+    <div class="list row-list">
       {% for f in home.recentFrames %}{{ m.frame_row(f) }}{% endfor %}
       {% for o in home.recentOrders[:2] %}{{ m.order_row(o) }}{% endfor %}
       {% if not home.recentFrames and not home.recentOrders %}{{ m.empty('🎱', 'No games yet', 'Your frames and orders will show up here.') }}{% endif %}

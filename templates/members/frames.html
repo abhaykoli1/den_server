@@ -26,12 +26,26 @@
       {% set rows = list if name == 'all' else (list|selectattr('won')|list if name == 'won' else (list|rejectattr('won')|list if name == 'lost' else list|selectattr('myDue','>',0)|list)) %}
       {% if rows %}{% set ns.any = True %}
         <div class="month-head">{{ month }}</div>
-        <div class="list">
+        <div class="list frame-list">
         {% for f in rows %}
-          <details class="card solid tight" style="padding:0">
-            <summary style="list-style:none;cursor:pointer">{{ m.frame_row(f)|replace('class="lrow"', 'class="lrow" style="box-shadow:none"') }}</summary>
-            <div style="padding:0 14px 14px">
-              <div class="divider" style="margin-top:0"></div>
+          <details class="frame-entry">
+            <summary class="frame-summary">
+              <span class="frame-row">
+                <span class="frame-row-icon {{ 'won' if f.won else 'lost' }}">{{ '🏆' if f.won else '🎱' }}</span>
+                <span class="frame-row-copy">
+                  <span class="frame-row-title">{{ 'Won' if f.won else 'Lost' }} · {{ f.tableName }}</span>
+                  <span class="frame-row-meta">{{ (f.endedAt or f.createdAt)|dt('rel') }} · {{ f.durationMinutes|duration }} · {% for p in f.players %}{{ 'You' if p.me else p.label }}{{ ' vs ' if not loop.last }}{% endfor %}</span>
+                </span>
+                <span class="frame-row-result">
+                  {% if f.won %}<span class="frame-row-amount ok">+{{ f.bonus|inr }}</span><span class="tiny muted">bonus</span>
+                  {% else %}<span class="frame-row-amount">{{ f.myCharge|inr }}</span>
+                    {% if f.myDue > 0 %}<span class="badge bad">{{ f.myDue|inr }} due</span>{% elif f.myParts %}<span class="tiny muted">{{ f.myParts|map(attribute='label')|join(' + ') }}</span>{% endif %}
+                  {% endif %}
+                </span>
+              </span>
+            </summary>
+            <div class="frame-entry-details">
+              <div class="divider"></div>
               <div class="kv"><span class="k">Players</span><span class="v">{% for p in f.players %}{{ 'You' if p.me else p.label }}{{ ' 🏆' if p.isWinner }}{{ ', ' if not loop.last }}{% endfor %}</span></div>
               <div class="kv"><span class="k">When</span><span class="v">{{ f.startedAt|dt }} · {{ f.durationMinutes|duration }}{% if f.peak %} · peak{% endif %}</span></div>
               <div class="kv"><span class="k">Table time</span><span class="v">{{ f.tableAmount|inr }}</span></div>

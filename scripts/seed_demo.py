@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.db import get_db  # noqa: E402
+from app.seller_plans import ensure_seller_plan_catalog  # noqa: E402
 from app.tournament import build_knockout, _advance  # noqa: E402
 from app.util import IST, iso, money, now_iso, now_utc, parse_iso, today_ist, uid  # noqa: E402
 
@@ -56,46 +57,52 @@ async def main():
     for u in (owner, master, staff):
         await db.users.insert_one(u)
 
-    plans = [
-        {"id": "sp_starter", "name": "Starter", "description": "One club, core billing",
-         "price": 499, "billingCycle": "monthly", "durationDays": 30, "trialDays": 7,
-         "maxClubs": 1, "features": ["Live table billing", "Players & dues",
-                                     "Item counter"],
-         "active": True, "recommended": False, "sortOrder": 1, "createdAt": now},
-        {"id": "sp_pro", "name": "Pro Monthly", "description": "Full club + reports",
-         "price": 999, "billingCycle": "monthly", "durationDays": 30, "trialDays": 14,
-         "maxClubs": 3, "features": ["Everything in Starter", "Finance & reports",
-                                     "Tournaments", "Email alerts"],
-         "active": True, "recommended": True, "sortOrder": 2, "createdAt": now},
-        {"id": "sp_annual", "name": "Pro Annual", "description": "Best value, 2 months free",
-         "price": 9999, "billingCycle": "yearly", "durationDays": 365, "trialDays": 0,
-         "maxClubs": 5, "features": ["Everything in Pro", "Priority support"],
-         "active": True, "recommended": False, "sortOrder": 3, "createdAt": now},
-    ]
-    for p in plans:
-        await db.subscription_plans.insert_one(p)
+    # Add the same six seller tiers used by production, without overwriting
+    # any plan edits already in the development database.
+    await ensure_seller_plan_catalog(db)
 
     # ---------------------------------------------------------------- club
     club = {"id": club_id, "name": "Rowdy's Den", "logo": "", "ownerUserId": owner["id"],
             "settings": {"winnerBonus": 30, "dueLimit": 1000, "defaultAdvance": 100,
                          "currency": "INR", "currencySymbol": "₹",
-                         "monthlyTableDiscount": 10},
+                         "monthlyTableDiscount": 10, "taxEnabled": True,
+                         "taxRate": 5, "taxLabel": "GST", "gstin": "08ABCDE1234F1Z5"},
             "createdAt": now}
     await db.clubs.insert_one(club)
 
     tables = [
         {"id": uid("t"), "clubId": club_id, "name": "Snooker 1", "active": True,
-         "sortOrder": 1, "rate": {"hourlyRate": 240, "minCharge": 20,
+         "sport": "snooker", "lightEnabled": True, "lightState": "off",
+         "sortOrder": 1, "rate": {"hourlyRate": 240, "billingMode": "hourly", "minCharge": 20,
                                   "ratesByPlayers": {"4": 300},
                                   "peakHourlyRate": 300, "peakStartHour": 18,
                                   "peakEndHour": 23, "glovePrice": 30}},
         {"id": uid("t"), "clubId": club_id, "name": "Pool 1", "active": True,
-         "sortOrder": 2, "rate": {"hourlyRate": 180, "minCharge": 15,
+         "sport": "pool", "sortOrder": 2, "rate": {"hourlyRate": 180, "billingMode": "hourly", "minCharge": 15,
                                   "ratesByPlayers": {}, "glovePrice": 0}},
         {"id": uid("t"), "clubId": club_id, "name": "Pool 2", "active": True,
-         "sortOrder": 3, "rate": {"hourlyRate": 180, "minCharge": 15,
+         "sport": "pool", "sortOrder": 3, "rate": {"hourlyRate": 180, "billingMode": "hourly", "minCharge": 15,
                                   "ratesByPlayers": {}, "glovePrice": 0}},
     ]
+    # Demo catalog for the Strikee-style multi-sport setup and RackPro tariffs.
+    for order, (sport, label, rate, mode) in enumerate([
+        ("billiards", "Billiards 1", 220, "per_frame"),
+        ("badminton", "Badminton Court 1", 450, "hourly"),
+        ("pickleball", "Pickleball Court 1", 500, "hourly"),
+        ("table_tennis", "Table Tennis 1", 160, "per_game"),
+        ("tennis", "Tennis Court 1", 700, "hourly"),
+        ("box_cricket", "Box Cricket 1", 1200, "flat"),
+        ("football", "Football Turf 1", 1500, "flat"),
+        ("basketball", "Basketball Court 1", 900, "hourly"),
+        ("gaming", "Gaming Station 1", 180, "hourly"),
+        ("arcade", "Arcade Zone 1", 80, "per_game"),
+    ], start=4):
+        tables.append({"id": uid("t"), "clubId": club_id, "name": label,
+                       "sport": sport, "active": True, "sortOrder": order,
+                       "lightEnabled": sport in ("badminton", "box_cricket", "football"),
+                       "lightState": "off", "rate": {"hourlyRate": rate,
+                       "billingMode": mode, "minCharge": 0,
+                       "ratesByPlayers": {}, "glovePrice": 0}})
     for t in tables:
         await db.tables.insert_one(t)
 

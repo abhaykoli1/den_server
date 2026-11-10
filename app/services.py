@@ -56,14 +56,17 @@ def frame_web_aliases(f: dict) -> dict:
                                     if p.get("pid") and p.get("pid") not in wset])
     frame_amount = money(f.get("frameAmount") or 0)
     old_due = money(f.get("oldDueAmount") or 0)
+    old_due_included = money(f.get("oldDueIncludedAmount") or (old_due if f.get("oldDueIncluded") else 0))
     f.setdefault("oldDueBefore", {})
     f.setdefault("oldDuePaid", {})
-    f.setdefault("totalAmount", money(frame_amount + old_due))
+    f.setdefault("oldDueIncludedAmount", old_due_included)
+    f.setdefault("totalAmount", money(frame_amount + (old_due_included if f.get("oldDueIncluded") else old_due)))
     lines = f.get("settlements") or []
     paid = money(sum(money(s.get("walletPart") or 0) + money(s.get("passPart") or 0) +
                      money(s.get("cashPart") or 0) + money(s.get("oldDuePart") or 0)
                      for s in lines))
-    due = money(sum(money(s.get("duePart") or 0) for s in lines))
+    due = money(sum(money(s.get("duePart") or 0) for s in lines)
+                + max(0.0, old_due_included - old_due))
     f.setdefault("paidAmount", paid)
     f.setdefault("dueAmount", due)
     f.setdefault("status", "paid" if due <= 0 else ("partial" if paid > 0 else "unpaid"))
@@ -122,13 +125,12 @@ async def get_club(user: dict, club_id: str, allow_member: bool = False) -> dict
 
 
 def subscription_is_active(sub: Optional[dict]) -> bool:
-    """Allow access for the non-terminal subscription states shown in the UI:
-    pending, trial, active, past_due, paused, keep_current/current.
-    Terminal states expired/cancelled remain blocked."""
+    """Only trials and approved subscriptions may use billing mutations.
+    Pending approval and paused/terminal subscriptions stay locked."""
     if not sub:
         return False
     status = str(sub.get("status") or "").strip().lower().replace(" ", "_")
-    allowed = {"pending", "trial", "active", "past_due", "paused", "keep_current", "current"}
+    allowed = {"trial", "active", "past_due", "keep_current", "current"}
     if status not in allowed:
         return False
     expires = str(sub.get("expiresAt") or "").strip()

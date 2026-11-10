@@ -5,8 +5,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% block title %}{{ club.name if club else "Members" }}{% endblock %} · Members</title>
-<meta name="theme-color" content="{{ '#191310' if theme == 'dark' else ('#c2a98d' if scheme == 'cafe' else ('#f3eee5' if scheme == 'paper' else '#c9b59f')) }}">
-<meta name="description" content="{{ club.name if club else "Rowdy's Den" }} members app — tables, bookings, cafe, store, wallet & frames.">
+<meta name="theme-color" content="{{ '#191310' if theme == 'dark' else ('#ebdcc7' if scheme == 'cafe' else ('#f3eee5' if scheme == 'paper' else '#f0e5d6')) }}">
+<meta name="description" content="{{ club.name if club else "Rowdy's Den" }} members app — tables, bookings, cafe, wallet & frames.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Den Members">
 <link rel="manifest" href="/members/manifest.json">
 <link rel="icon" href="/members/static/members/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/members/static/members/icons/icon-192.png">
@@ -39,7 +42,6 @@
 <nav class="nav" aria-label="Main">
   <a href="/members" class="{{ 'on' if active_tab == 'home' }}" aria-label="Home">{{ m.icon('home') }}</a>
   <a href="/members/cafe" class="{{ 'on' if active_tab == 'cafe' }}" aria-label="Cafe">{{ m.icon('cafe') }}</a>
-  <a href="/members/shop" class="{{ 'on' if active_tab == 'shop' }}" aria-label="Store">{{ m.icon('shop') }}<span class="n" data-cart-count hidden>0</span></a>
   <a href="/members/bookings" class="{{ 'on' if active_tab == 'bookings' }}" aria-label="Bookings">{{ m.icon('calendar') }}</a>
   <a href="/members/more" class="{{ 'on' if active_tab == 'more' }}" aria-label="More">{{ m.icon('grid') }}{% if unread %}<span class="n">{{ unread if unread < 10 else '9+' }}</span>{% endif %}</a>
 </nav>
@@ -67,6 +69,13 @@ window.DEN = {
 <script src="/members/static/members/js/ui.js?v={{ APP_VERSION }}" defer></script>
 <script src="/members/static/members/js/flows.js?v={{ APP_VERSION }}" defer></script>
 <script src="/members/static/members/js/pages.js?v={{ APP_VERSION }}" defer></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("/members/sw.js", { scope: "/members/" }).catch(function () {});
+  });
+}
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

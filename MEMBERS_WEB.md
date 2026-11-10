@@ -83,7 +83,9 @@ For the full request flow, trust boundaries, auth model and extension rules, see
 GET  home · dashboard · me · tables · catalog · items/{id}
 GET  orders · orders/{id}          POST orders {items, mode: wallet|counter|upi, utr?, tableId?, note?}
 POST orders/{id}/pay               (settle an unpaid bill from wallet)
-GET  wallet                        POST dues/pay {amount?}   POST wallet/topup-requests {amount, utr}
+GET  wallet                        POST dues/pay {amount?}
+POST wallet/topup-requests {amount, utr, planId?}
+     planId selects a wallet offer; its wallet credit/bonus is calculated from the server plan and applied on admin approval.
 GET  frames · rankings · activity  POST activity/seen
 GET  bookings · bookings/availability?tableId&date   POST bookings   DELETE bookings/{id}
 GET  tournaments                   POST/DELETE tournaments/{id}/join {mode: wallet|counter}

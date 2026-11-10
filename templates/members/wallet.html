@@ -21,7 +21,7 @@
   {% if requests.pending %}
   <div class="card mt12">
     <div class="h4">Awaiting counter confirmation</div>
-    {% for r in requests.pending %}<div class="row between mt8 small"><span>{{ 'Top-up' if r.utr and not r.planName else r.planName }} · ref {{ r.utr }}</span><span class="badge warn">{{ r.amount|inr }} pending</span></div>{% endfor %}
+    {% for r in requests.pending %}<div class="row between mt8 small"><span>{{ 'Top-up' if r.utr and not r.planName else r.planName }} · ref {{ r.utr }}{% if r.creditAmount and r.creditAmount > r.amount %}<br>Wallet credit {{ r.creditAmount|inr }} · {{ (r.creditAmount - r.amount)|inr }} bonus{% endif %}</span><span class="badge warn">{{ r.amount|inr }} paid · pending</span></div>{% endfor %}
     <p class="hint mt8">Show the payment on your UPI app at the counter if it's taking long.</p>
   </div>
   {% endif %}
@@ -32,7 +32,7 @@
 
   <div class="mt16" data-panel="wallet" data-name="all" hidden>
     {% if ledger %}
-    <div class="list">
+    <div class="list row-list">
     {% for r in ledger %}
       <div class="lrow">
         <div class="ico emoji" style="background:{{ 'var(--ok-soft)' if r.amount > 0 else ('var(--bad-soft)' if r.kind == 'due' else 'var(--track)') }}">{{ {'frame':'🎱','pass':'🎟','due':'📝','cash':'💵','bonus':'🏆','bill':'🛍️','topup':'💳','plan':'⭐'}.get(r.kind, '•') }}</div>
@@ -50,7 +50,7 @@
         <div class="row between"><span class="muted small">Total due</span><span class="h3 bad">{{ dues.total|inr }}</span></div>
         {% if dues.pendingUpi %}<div class="xs muted mt4">{{ dues.pendingUpi|inr }} of this is UPI awaiting verification.</div>{% endif %}
       </div>
-      <div class="list mt12">
+      <div class="list row-list mt12">
       {% for e in dues.entries %}
         <a class="lrow" href="{{ '/members/orders/' ~ e.id if e.kind == 'bill' else '/members/frames' }}">
           <div class="ico emoji">{{ '🎱' if e.kind == 'frame' else '🧾' }}</div>
@@ -61,7 +61,14 @@
       {% if dues.other > 0 %}<div class="lrow"><div class="ico emoji">📝</div><div class="grow"><div class="t">Other / older dues</div><div class="s">Carried on your tab</div></div><div class="amt bad">{{ dues.other|inr }}</div></div>{% endif %}
       </div>
       <button class="btn mt16" data-pay-due data-due="{{ dues.total }}" data-wallet="{{ member.walletBalance }}">Pay from wallet</button>
-      <p class="hint center mt8">Or pay cash / UPI at the counter — dues clear instantly.</p>
+      {% if qr or club.upiId %}
+      <div class="card center mt12">
+        <div class="h4">Pay {{ dues.total|inr }} by UPI</div>
+        <p class="hint mt4">Scan the club QR, then show the payment reference at the counter to clear your due.</p>
+        {% if qr %}<img class="qr mt12" src="{{ qr }}" alt="Club UPI payment QR">{% endif %}
+        {% if club.upiId %}<div class="mt8"><span class="upi-id">{{ club.upiId }} <button class="link xs" data-copy="{{ club.upiId }}">copy</button></span></div>{% endif %}
+      </div>
+      {% else %}<p class="hint center mt8">You can also pay cash / UPI at the counter.</p>{% endif %}
     {% else %}{{ m.empty('✨', "You're all clear", 'No pending table time or bills.') }}{% endif %}
   </div>
 
@@ -70,7 +77,7 @@
     <div class="card solid">
       <div class="row between"><div><div class="h3">{{ o.name }}</div><div class="small muted">{{ o.benefit }}</div></div><div class="h3">{{ o.amount|inr }}</div></div>
       {% if o.description %}<p class="xs muted mt8">{{ o.description }}</p>{% endif %}
-      <button class="btn sm mt12" data-topup data-amount="{{ o.amount }}" data-offers='{{ offers|tojson_safe }}'>Recharge {{ o.amount|inr }}{% if o.value > o.amount %} → get {{ o.value|inr }}{% endif %}</button>
+      <button class="btn sm mt12" data-topup data-amount="{{ o.amount }}" data-plan-id="{{ o.id }}" data-offers='{{ offers|tojson_safe }}'>Recharge {{ o.amount|inr }}{% if o.value > o.amount %} → get {{ o.value|inr }}{% endif %}</button>
     </div>
     {% endfor %}
     <div class="card mt12">

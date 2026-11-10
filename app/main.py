@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import dump_snapshot, get_db
+from .seller_plans import ensure_seller_plan_catalog
 from .routers import (auth, bookings, clubs, expenses, frames, items, logs, master,
                       member_portal, members, plans, platform, portal_admin, reports,
                       sessions, subscriptions, tables, team, tournaments, members_web)
@@ -35,7 +36,10 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def _startup():
-    await get_db()  # hydrates snapshot + ensures indexes
+    settings.validate_production()
+    db = await get_db()  # hydrates snapshot + ensures indexes
+    if settings.APP_ENV == "production":
+        await ensure_seller_plan_catalog(db)
 
 
 @app.on_event("shutdown")

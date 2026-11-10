@@ -15,6 +15,12 @@ router = APIRouter(prefix="/clubs", tags=["clubs"])
 DEFAULT_SETTINGS = {
     "winnerBonus": 0, "dueLimit": 1000, "defaultAdvance": 0,
     "currency": "INR", "currencySymbol": "₹", "monthlyTableDiscount": 0,
+    "taxEnabled": False, "taxRate": 0, "taxLabel": "GST", "gstin": "",
+}
+
+CURRENCY_SYMBOLS = {
+    "INR": "₹", "USD": "$", "GBP": "£", "EUR": "€",
+    "AED": "د.إ", "SGD": "S$", "CAD": "C$", "AUD": "A$",
 }
 
 
@@ -109,6 +115,8 @@ async def patch_settings(club_id: str, payload: ClubSettingsIn,
     club = await get_club(user, club_id)
     db = await db_mod.get_db()
     ops = {f"settings.{k}": v for k, v in payload.model_dump().items() if v is not None}
+    if payload.currency is not None:
+        ops["settings.currencySymbol"] = CURRENCY_SYMBOLS[payload.currency]
     if not ops:
         raise HTTPException(400, "Nothing to update")
     await db.clubs.update_one({"id": club_id}, {"$set": ops})

@@ -50,13 +50,17 @@
 {%- endmacro %}
 
 {# product card — square image, price pill, add button #}
-{% macro product_card(i, wide=False, attrs='') -%}
+{% macro product_card(i, wide=False, attrs='', stepper=False) -%}
 <a class="pcard {{ 'wide' if wide }} {{ 'oos' if not i.inStock }}" href="/members/item/{{ i.id }}" data-kind="{{ i.kind }}" {% if i.sold > 0 %}data-popular{% endif %} {{ attrs|safe }}>
   <div class="img">
     {% if i.image %}<img src="{{ i.image }}" alt="{{ i.name }}" loading="lazy">{% else %}<div class="ph" style="--h:{{ i.name|hue }}">{{ i.emoji }}</div>{% endif %}
     <span class="price">{{ i.price|inr }}</span>
     {% if not i.inStock %}<span class="tag out">Sold out</span>{% elif i.featured %}<span class="tag">Pick</span>{% elif i.lowStock %}<span class="tag">{{ i.stockQty }} left</span>{% endif %}
-    {% if i.inStock %}<button class="add" type="button" aria-label="Add {{ i.name }} to cart" data-cart-add="{{ i.id }}" data-name="{{ i.name }}" data-price="{{ i.price }}" data-image="{{ i.image }}" data-emoji="{{ i.emoji }}" data-kind="{{ i.kind }}" data-stock="{{ i.stockQty }}" data-hue="{{ i.name|hue }}">{{ icon('plus') }}</button>{% endif %}
+    {% if i.inStock %}
+      {% if stepper %}<div class="cart-stepper" data-cart-stepper><button class="cart-minus" type="button" aria-label="Remove one {{ i.name }}" data-cart-remove="{{ i.id }}" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg></button><span class="cart-qty" data-cart-qty hidden>0</span>{% endif %}
+      <button class="add" type="button" aria-label="Add {{ i.name }} to cart" data-cart-add="{{ i.id }}" data-name="{{ i.name }}" data-price="{{ i.price }}" data-image="{{ i.image }}" data-emoji="{{ i.emoji }}" data-kind="{{ i.kind }}" data-stock="{{ i.stockQty }}" data-hue="{{ i.name|hue }}">{{ icon('plus') }}</button>
+      {% if stepper %}</div>{% endif %}
+    {% endif %}
   </div>
   <div class="name ellipsis">{{ i.name }}</div>
   <div class="sub ellipsis">{{ i.category }}{% if i.sold >= 5 %} · {{ i.sold }} sold{% endif %}</div>

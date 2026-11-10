@@ -222,6 +222,12 @@ def _snapshot_loop():
 # ---------------------------------------------------------------------- boot
 async def ensure_indexes(db):
     """Per-index, fault tolerant (warn + continue)."""
+    try:
+        await db.subscription_plans.create_index([("id", 1)], unique=True)
+    except Exception as exc:
+        code = getattr(exc, "code", None)
+        if code not in (85, 86):
+            print(f"[indexes] subscription_plans unique id: {exc}")
     owned = ["tables", "members", "plans", "sessions", "frames", "menu_items",
              "item_bills", "membership_sales", "expenses", "tournaments", "logs"]
     plans = []

@@ -1,7 +1,7 @@
 """Member-only API — `/api/member-portal/*`.
 
 Everything a signed-in club member can read or do from the members app:
-home feed, catalogue (cafe + pro-shop), cart checkout, orders, wallet + dues,
+home feed, cafe catalogue, cart checkout, orders, wallet + dues,
 frames, rankings, bookings, tournaments, membership plans, activity, profile.
 
 Money rules (mirrors the counter so reports never double count):
@@ -20,12 +20,13 @@ from pydantic import Field
 
 from .. import db as db_mod
 from ..auth import current_user
+from ..mail import send_and_record, tpl_wallet_topup_request
 from ..models import In
 from ..portal import (catalog, club_tournaments, due_breakdown, frame_stats,
                       home_payload, live_tables, member_context, member_summary,
                       membership_status, my_activity, my_bills, my_bookings,
                       my_frames, my_requests, plan_view, public_club, public_item,
-                      sold_counts, wallet_ledger, bill_view)
+                      sold_counts, wallet_ledger, bill_view, item_kind)
 from ..services import grant_plan, payment_log, write_log
 from ..util import IST, fmt, iso, money, now_iso, now_utc, uid
 from .bookings import (BookingIn, CLOSE_HOUR, CLOSE_MIN, MAX_DAYS_AHEAD, OPEN_HOUR,
@@ -58,6 +59,7 @@ class PayDueIn(In):
 class TopupIn(In):
     amount: float = Field(gt=0, le=100000)
     utr: str = Field(min_length=4, max_length=40)
+    planId: Optional[str] = None
 
 
 class MembershipRequestIn(In):
@@ -84,6 +86,17 @@ class SwitchClubIn(In):
 
 class SeenIn(In):
     at: Optional[str] = None
+
+
+@router.get("/payment-details")
+async def payment_details(user: dict = Depends(current_user)):
+    """Return the signed-in member's club payment QR and UPI ID."""
+    _db, _member, club = await member_context(user)
+    return {
+        "qrCode": club.get("qrCode") or "",
+        "upiId": public_club(club).get("upiId") or "",
+        "clubName": club.get("name") or "Club",
+    }
 
 
 # ------------------------------------------------------------------ helpers
@@ -139,7 +152,7 @@ async def dashboard(user: dict = Depends(current_user)):
     return {
         "member": member_summary(member), "club": public_club(club), "tables": tables,
         "dueFrames": [f for f in frames if f["myDue"] > 0], "dues": due_breakdown(member, frames, bills),
-        "menuItems": cat["items"], "activity": act["items"], "orders": bills,
+        "menuItems": cat["cafe"], "activity": act["items"], "orders": bills,
         "serverNow": now_iso(),
     }
 
@@ -156,6 +169,12 @@ async def tables(user: dict = Depends(current_user)):
 async def get_catalog(user: dict = Depends(current_user)):
     db, member, club = await member_context(user)
     cat = await catalog(db, club["id"])
+    cat["items"] = cat["cafe"]
+    cat["shop"] = []
+    cat["shopCategories"] = []
+    cat["popular"] = sorted([item for item in cat["cafe"] if item["inStock"]], key=lambda item: (-item["sold"], item["name"]))[:10]
+    cat["newArrivals"] = sorted([item for item in cat["cafe"] if item["inStock"]], key=lambda item: item["createdAt"], reverse=True)[:10]
+    cat["featured"] = [item for item in cat["featured"] if item["kind"] == "cafe"]
     cat["club"] = public_club(club)
     cat["walletBalance"] = money(member.get("walletBalance") or 0)
     return cat
@@ -167,12 +186,14 @@ async def get_item(item_id: str, user: dict = Depends(current_user)):
     item = await db.menu_items.find_one({"id": item_id, "clubId": club["id"], "active": {"$ne": False}})
     if not item:
         raise HTTPException(404, "Item not found")
+    if item_kind(item) != "cafe":
+        raise HTTPException(404, "Item not found")
     sold = await sold_counts(db, club["id"])
     view = public_item(item, sold)
     cat = await catalog(db, club["id"], include_out_of_stock=False)
-    related = [v for v in cat["items"] if v["id"] != item_id and v["category"] == view["category"]][:6]
+    related = [v for v in cat["cafe"] if v["id"] != item_id and v["category"] == view["category"]][:6]
     if len(related) < 4:
-        related += [v for v in cat["items"] if v["id"] != item_id and v["kind"] == view["kind"]
+        related += [v for v in cat["cafe"] if v["id"] != item_id
                     and v not in related][:6 - len(related)]
     return {"item": view, "related": related}
 
@@ -230,6 +251,13 @@ async def create_order(payload: OrderIn, user: dict = Depends(current_user)):
         if qty > 50:
             await _restore(db, lines)
             raise HTTPException(400, "Max 50 of one item per order")
+        probe = await db.menu_items.find_one({"id": item_id, "clubId": club["id"], "active": {"$ne": False}})
+        if not probe:
+            await _restore(db, lines)
+            raise HTTPException(400, "One item in your cart is no longer available")
+        if item_kind(probe) != "cafe":
+            await _restore(db, lines)
+            raise HTTPException(400, "Pro shop orders are temporarily unavailable")
         item = await db.menu_items.find_one_and_update(
             {"id": item_id, "clubId": club["id"], "active": {"$ne": False}, "stockQty": {"$gte": qty}},
             {"$inc": {"stockQty": -qty}}, after=False)
@@ -423,13 +451,75 @@ async def request_topup(payload: TopupIn, user: dict = Depends(current_user)):
     dup = await db.wallet_topup_requests.find_one({"clubId": club["id"], "utr": utr})
     if dup:
         raise HTTPException(400, "That UPI reference was already submitted")
+    plan = None
+    credit_amount = amount
+    if payload.planId:
+        plan = await db.plans.find_one({"id": payload.planId, "clubId": club["id"], "type": "wallet", "active": {"$ne": False}})
+        if not plan or money(plan.get("amount") or 0) != amount:
+            raise HTTPException(400, "Selected wallet offer is no longer available")
+        credit_amount = money(plan.get("value") or plan.get("amount") or 0)
+    elif "planId" not in payload.model_fields_set:
+        # Older cached Members pages did not submit planId. Recover the offer
+        # only when this amount identifies exactly one active wallet plan.
+        plans = await db.plans.find({
+            "clubId": club["id"], "type": "wallet", "active": {"$ne": False},
+        }).to_list(None)
+        matches = [p for p in plans if money(p.get("amount") or 0) == amount]
+        if len(matches) == 1:
+            plan = matches[0]
+            credit_amount = money(plan.get("value") or plan.get("amount") or 0)
+    bonus_amount = money(max(0, credit_amount - amount))
     req = {"id": uid("topup"), "clubId": club["id"], "memberId": member["id"], "memberName": member.get("name", ""),
-           "amount": amount, "utr": utr, "status": "pending", "createdAt": now_iso()}
+           "amount": amount, "creditAmount": credit_amount, "bonusAmount": bonus_amount,
+           "planId": plan.get("id") if plan else None, "planName": plan.get("name") if plan else None,
+           "offerSelected": plan is not None,
+           "utr": utr, "status": "pending", "createdAt": now_iso()}
     await db.wallet_topup_requests.insert_one(req)
     req.pop("_id", None)
     await write_log(club["id"], "WARNING", f"Wallet top-up request · {member.get('name')} · ₹{fmt(amount)} · UPI ref {utr} (verify)",
                     actor=member.get("name", ""), member_id=member["id"], ref_type="topup_request", ref_id=req["id"], amount=amount)
-    return {"request": req, "message": "Top-up submitted — your balance updates once the counter confirms the payment"}
+    subject, html = tpl_wallet_topup_request(club.get("name", ""), member, req)
+    recipients = []
+    owner_id = club.get("ownerUserId")
+    if owner_id:
+        owner = await db.users.find_one({"id": owner_id})
+        if owner and owner.get("role") != "master" and owner.get("active", True) is not False and owner.get("email"):
+            recipients.append(owner)
+    staff = await db.users.find({"clubIds": club["id"], "role": "staff", "active": {"$ne": False}}).to_list(None)
+    recipients.extend(staff)
+    unique_recipients = {
+        str(recipient.get("email") or "").strip().lower(): recipient
+        for recipient in recipients if str(recipient.get("email") or "").strip()
+    }
+    if not unique_recipients:
+        await send_and_record(
+            "wallet_topup_request", "", subject, html,
+            club_id=club["id"], member_id=member["id"],
+        )
+        await write_log(
+            club["id"], "WARNING",
+            "Wallet top-up email could not be sent · no active club admin email is configured",
+            actor="system", member_id=member["id"],
+            ref_type="topup_request", ref_id=req["id"],
+        )
+    else:
+        for recipient in unique_recipients.values():
+            mail = await send_and_record(
+                "wallet_topup_request", recipient["email"], subject, html,
+                user_id=recipient.get("id"), club_id=club["id"],
+                member_id=member["id"],
+            )
+            if not mail.get("sent"):
+                await write_log(
+                    club["id"], "WARNING",
+                    f"Wallet top-up email could not be delivered to {recipient['email']} · see mailouts",
+                    actor="system", member_id=member["id"],
+                    ref_type="topup_request", ref_id=req["id"],
+                )
+    message = f"Top-up submitted — ₹{fmt(credit_amount)} wallet credit"
+    if bonus_amount > 0:
+        message += f" includes ₹{fmt(bonus_amount)} bonus"
+    return {"request": req, "message": message + " after the counter confirms the payment"}
 
 
 @router.get("/requests")

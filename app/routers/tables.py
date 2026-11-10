@@ -3,9 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .. import db as db_mod
 from ..auth import current_user
-from ..models import TableIn, TablePatchIn
-from ..services import billing_gate, get_club
-from ..util import uid
+from ..models import TableIn, TableLightIn, TablePatchIn
+from ..services import billing_gate, get_club, write_log
+from ..util import now_iso, uid
 
 router = APIRouter(prefix="/clubs/{club_id}/tables", tags=["tables"])
 
@@ -13,6 +13,7 @@ router = APIRouter(prefix="/clubs/{club_id}/tables", tags=["tables"])
 def _rate_dict(rate) -> dict:
     r = {
         "hourlyRate": float(rate.hourlyRate),
+        "billingMode": rate.billingMode,
         "ratesByPlayers": {str(k): float(v) for k, v in (rate.ratesByPlayers or {}).items()},
         "minCharge": float(rate.minCharge or 0),
         "glovePrice": float(rate.glovePrice or 0),
@@ -48,6 +49,8 @@ async def create_table(club_id: str, payload: TableIn, user: dict = Depends(curr
     db = await db_mod.get_db()
     table = {
         "id": uid("t"), "clubId": club["id"], "name": payload.name.strip(),
+        "sport": payload.sport, "lightEnabled": payload.lightEnabled,
+        "lightState": payload.lightState,
         "active": True, "sortOrder": payload.sortOrder or 0,
         "rate": _rate_dict(payload.rate),
     }
@@ -61,9 +64,21 @@ async def patch_table(club_id: str, table_id: str, payload: TablePatchIn,
                       user: dict = Depends(current_user)):
     club = await get_club(user, club_id)
     db = await db_mod.get_db()
+    current = await db.tables.find_one({"id": table_id, "clubId": club["id"]})
+    if not current:
+        raise HTTPException(404, "Table not found")
     ops = {}
     if payload.name is not None:
         ops["name"] = payload.name.strip()
+    if payload.sport is not None:
+        ops["sport"] = payload.sport
+    if payload.lightEnabled is not None:
+        ops["lightEnabled"] = payload.lightEnabled
+    if payload.lightState is not None:
+        light_enabled = payload.lightEnabled if payload.lightEnabled is not None else current.get("lightEnabled", False)
+        if payload.lightState == "on" and not light_enabled:
+            raise HTTPException(400, "Enable smart light control for this table first")
+        ops["lightState"] = payload.lightState
     if payload.rate is not None:
         ops["rate"] = _rate_dict(payload.rate)
     if payload.sortOrder is not None:
@@ -74,9 +89,30 @@ async def patch_table(club_id: str, table_id: str, payload: TablePatchIn,
         raise HTTPException(400, "Nothing to update")
     table = await db.tables.find_one_and_update(
         {"id": table_id, "clubId": club["id"]}, {"$set": ops})
+    return table
+
+
+@router.post("/{table_id}/light")
+async def control_light(club_id: str, table_id: str, payload: TableLightIn,
+                        user: dict = Depends(current_user)):
+    """Demo-ready smart-light control; persists state for a controller bridge."""
+    club = await get_club(user, club_id)
+    db = await db_mod.get_db()
+    table = await db.tables.find_one({"id": table_id, "clubId": club["id"]})
     if not table:
         raise HTTPException(404, "Table not found")
-    return table
+    if not table.get("lightEnabled"):
+        raise HTTPException(400, "Enable smart light control for this table first")
+    state = ("off" if table.get("lightState", "off") == "on" else "on") \
+        if payload.state == "toggle" else payload.state
+    await db.tables.update_one(
+        {"id": table_id, "clubId": club["id"]},
+        {"$set": {"lightState": state, "lightUpdatedAt": now_iso(),
+                   "lightUpdatedBy": user.get("name", "")}},
+    )
+    await write_log(club["id"], "ADMIN", f"Table light {state.upper()} · {table['name']}",
+                    actor=user.get("name", ""))
+    return {"tableId": table_id, "state": state, "mode": "simulated"}
 
 
 @router.post("/{table_id}/toggle-active")

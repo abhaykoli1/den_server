@@ -414,8 +414,8 @@ async def wallet_ledger(db, club: dict, member: dict, frames: list[dict],
     for t in topups:
         if t.get("status") == "approved":
             rows.append({"at": t.get("approvedAt") or t["createdAt"], "title": "Wallet top-up",
-                         "amount": money(t.get("amount") or 0), "kind": "topup",
-                         "sub": f"UPI ref {t.get('utr', '')}", "ref": t["id"]})
+                         "amount": money(t.get("creditAmount") or t.get("amount") or 0), "kind": "topup",
+                         "sub": f"Paid ₹{money(t.get('amount') or 0):g} · UPI ref {t.get('utr', '')}", "ref": t["id"]})
 
     logs = await db.logs.find({"clubId": club["id"], "memberId": mid, "tag": "PAYMENT", "type": "due"},
                               sort=[("createdAt", -1)]).to_list(200)
@@ -618,8 +618,9 @@ async def home_payload(db, member: dict, club: dict, user: dict) -> dict:
         "recentFrames": frames[:3], "stats": frame_stats(frames),
         "unpaidBills": [b for b in bills if b["dueAmount"] > 0],
         "recentOrders": bills[:3],
-        "popular": cat["popular"][:6], "newArrivals": cat["newArrivals"][:6],
-        "cafe": cat["cafe"][:6], "shop": cat["shop"][:6], "featured": cat["featured"],
+        "popular": sorted([item for item in cat["cafe"] if item["inStock"]], key=lambda item: (-item["sold"], item["name"]))[:6],
+        "newArrivals": sorted([item for item in cat["cafe"] if item["inStock"]], key=lambda item: item["createdAt"], reverse=True)[:6],
+        "cafe": cat["cafe"][:6],
         "nextBooking": upcoming[0] if upcoming else None, "upcomingBookings": upcoming[:3],
         "tournaments": [t for t in tours if t["status"] in ("upcoming", "running")][:2],
         "unread": act["unread"], "pendingRequests": reqs["pending"],

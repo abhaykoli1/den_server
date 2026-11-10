@@ -1,12 +1,12 @@
 {% extends "members/base.html" %}
-{% set back = '/members/shop' %}
+{% set back = '/members/cafe' %}
 {% set nav = False %}
 {% block title %}Cart{% endblock %}
 {% block heading %}Your cart{% endblock %}
 {% block topactions %}<span class="small muted" data-cart-count-lbl></span>{% endblock %}
 {% block content %}
 <div class="fade-in" data-cart-page>
-  <div class="list mt16" data-cart-lines></div>
+  <div class="list row-list cart-list mt16" data-cart-lines></div>
 
   <div data-checkout hidden>
     {% set mine = tables|selectattr('mine')|list %}
@@ -26,9 +26,11 @@
       {% endif %}
     </div>
     <div class="card mt12 center" data-upi-box hidden>
-      <div class="small">Pay <b data-upi-amt></b> to <span class="upi-id">{{ club.upiId }}</span></div>
+      <div class="small">Scan the club QR and pay <b data-upi-amt></b>{% if club.upiId %} to <span class="upi-id">{{ club.upiId }}</span>{% endif %}</div>
+      {% if qr %}<img class="qr mt12" src="{{ qr }}" alt="Club UPI payment QR">{% endif %}
       {% if club.upiId %}<a class="btn sm mt12 auto" data-upi-link href="#">Open UPI app</a>{% endif %}
       <input class="input mt12" data-utr placeholder="UPI reference / UTR number">
+      <p class="hint mt8">Your order stays pending until the counter verifies the payment reference.</p>
     </div>
 
     <div class="card solid mt20">
@@ -37,7 +39,7 @@
       {% if dues.total > 0 %}<div class="kv"><span class="k">Existing due</span><span class="v bad">{{ dues.total|inr }}</span></div>{% endif %}
     </div>
     <button class="btn mt16" data-place data-busy="Placing order…">Place order</button>
-    <p class="hint center mt12">Stock is reserved when you place the order. Cafe items are served to your table; store items are kept at the counter for pickup.</p>
+    <p class="hint center mt12">Stock is reserved when you place the order. Cafe items are served to your table or kept for counter pickup.</p>
   </div>
 </div>
 {% endblock %}

@@ -44,6 +44,11 @@ class ClubSettingsIn(In):
     dueLimit: Optional[float] = Field(default=None, ge=0, le=1000000)
     defaultAdvance: Optional[float] = Field(default=None, ge=0, le=100000)
     monthlyTableDiscount: Optional[float] = Field(default=None, ge=0, le=100)
+    currency: Optional[Literal["INR", "USD", "GBP", "EUR", "AED", "SGD", "CAD", "AUD"]] = None
+    taxEnabled: Optional[bool] = None
+    taxRate: Optional[float] = Field(default=None, ge=0, le=30)
+    taxLabel: Optional[str] = Field(default=None, max_length=30)
+    gstin: Optional[str] = Field(default=None, max_length=20)
     isOpen: Optional[bool] = None
 
 
@@ -51,9 +56,16 @@ class ClubStatusIn(In):
     isOpen: bool
 
 
+class DayCloseIn(In):
+    date: Optional[str] = None
+    actualCash: float = Field(ge=0, le=100000000)
+    note: Optional[str] = Field(default=None, max_length=300)
+
+
 # --------------------------------------------------------------------- tables
 class TableRateIn(In):
     hourlyRate: float = Field(ge=0, le=100000)
+    billingMode: Literal["hourly", "per_frame", "per_game", "flat"] = "hourly"
     ratesByPlayers: Optional[dict] = None          # {"2": 240, "4": 300}
     minCharge: Optional[float] = Field(default=0, ge=0, le=100000)
     peakHourlyRate: Optional[float] = Field(default=None, ge=0, le=100000)
@@ -64,6 +76,9 @@ class TableRateIn(In):
 
 class TableIn(In):
     name: str = Field(min_length=1, max_length=60)
+    sport: Literal["snooker", "pool", "billiards", "badminton", "pickleball", "table_tennis", "tennis", "box_cricket", "football", "basketball", "gaming", "arcade"] = "snooker"
+    lightEnabled: bool = False
+    lightState: Literal["on", "off"] = "off"
     rate: TableRateIn
     sortOrder: Optional[int] = 0
     active: Optional[bool] = True  # web bhejta hai create pe
@@ -76,12 +91,15 @@ class TableIn(In):
         if isinstance(data, dict) and "rate" not in data and "hourlyRate" in data:
             data["rate"] = {k: data.get(k) for k in (
                 "hourlyRate", "ratesByPlayers", "minCharge", "peakHourlyRate",
-                "peakStartHour", "peakEndHour", "glovePrice")}
+                "peakStartHour", "peakEndHour", "glovePrice", "billingMode")}
         return data
 
 
 class TablePatchIn(In):
     name: Optional[str] = Field(default=None, min_length=1, max_length=60)
+    sport: Optional[Literal["snooker", "pool", "billiards", "badminton", "pickleball", "table_tennis", "tennis", "box_cricket", "football", "basketball", "gaming", "arcade"]] = None
+    lightEnabled: Optional[bool] = None
+    lightState: Optional[Literal["on", "off"]] = None
     rate: Optional[TableRateIn] = None
     sortOrder: Optional[int] = None
     active: Optional[bool] = None
@@ -93,8 +111,12 @@ class TablePatchIn(In):
         if isinstance(data, dict) and "rate" not in data and "hourlyRate" in data:
             data["rate"] = {k: data.get(k) for k in (
                 "hourlyRate", "ratesByPlayers", "minCharge", "peakHourlyRate",
-                "peakStartHour", "peakEndHour", "glovePrice")}
+                "peakStartHour", "peakEndHour", "glovePrice", "billingMode")}
         return data
+
+
+class TableLightIn(In):
+    state: Literal["on", "off", "toggle"]
 
 
 # -------------------------------------------------------------------- members
@@ -217,6 +239,8 @@ class SessionConfirmIn(In):
     split: bool = False
     discount: float = Field(default=0, ge=0, le=1000000)
     cashPaid: float = Field(default=0, ge=0, le=1000000)
+    unitsPlayed: int = Field(default=1, ge=1, le=1000)
+    includeOldDue: bool = False
     mode: Literal["cash", "upi", "card"] = "cash"
     usePass: list[str] = Field(default_factory=list)     # memberIds to bill via frame pass
     # ---- web-frontend aliases / extras (safe; classical keys untouched) ----
@@ -482,6 +506,7 @@ class MasterPlanIn(In):
     features: list[str] = Field(default_factory=list)
     recommended: bool = False
     sortOrder: int = 0
+    active: bool = True
 
 
 class MasterPlanPatchIn(In):

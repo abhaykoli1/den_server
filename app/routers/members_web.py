@@ -9,7 +9,7 @@ Routes
   /members                    home            /members/wallet         wallet · dues · ledger
   /members/tables             live tables     /members/frames         my games + stats
   /members/cafe               cafe menu       /members/rankings       leaderboard
-  /members/shop               pro shop        /members/bookings       list · calendar · new
+  /members/shop               temporarily redirects to cafe
   /members/item/{id}          product         /members/bookings/{id}  confirmation ticket
   /members/cart               cart+checkout   /members/membership     plans
   /members/orders[/{id}]      orders          /members/tournaments    events
@@ -28,7 +28,7 @@ from urllib.parse import quote
 
 import jwt
 from fastapi import APIRouter, Form, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .. import db as db_mod
@@ -54,7 +54,7 @@ TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 COOKIE = "den_member"
 THEME_COOKIE = "den_theme"
-APP_VERSION = "4.1.1"
+APP_VERSION = "4.1.19"
 
 try:
     from zoneinfo import ZoneInfo
@@ -192,9 +192,9 @@ jinja.globals.update({"APP_VERSION": APP_VERSION, "emoji_for": emoji_for})
 
 
 def render(request: Request, name: str, ctx: dict, status: int = 200) -> HTMLResponse:
-    theme = request.cookies.get(THEME_COOKIE) or "light"
+    theme = request.cookies.get(THEME_COOKIE) or "system"
     base = {
-        "request": request, "theme": theme if theme in ("light", "dark") else "light",
+        "request": request, "theme": theme if theme in ("light", "dark") else "system",
         "api_base": settings.MEMBERS_WEB_API_BASE or "/api",
         "google_client_id": settings.MEMBERS_WEB_GOOGLE_CLIENT_ID or settings.GOOGLE_CLIENT_ID or "",
         "tables_poll_ms": settings.MEMBERS_WEB_TABLES_POLL_MS or 20000,
@@ -267,6 +267,7 @@ async def page_ctx(request: Request):
 def _common(member: dict, club: dict, user: dict, unread: int = 0) -> dict:
     return {"member": member_summary(member), "club": public_club(club), "token": user.get("_token", ""),
             "email": user.get("email") or member.get("email") or "", "unread": unread,
+            "qr": club.get("qrCode") or "",
             "memberships": [{"clubId": m.get("clubId"), "clubName": (m.get("club") or {}).get("name", "Club"),
                              "current": m.get("clubId") == club["id"]}
                             for m in (user.get("_udoc") or {}).get("memberships") or []]}
@@ -291,6 +292,8 @@ def _otp_hash(email: str, code: str) -> str:
 async def home(request: Request):
     db, member, club, user = await page_ctx(request)
     data = await home_payload(db, member, club, user.get("_udoc") or {})
+    ranking_data = await _rankings_api(user)
+    data["rankings"] = ranking_data["rankings"][:3]
     ctx = _common(member, club, user, data["unread"])
     ctx.update({"home": data, "active_tab": "home"})
     return render(request, "members/home.html", ctx)
@@ -497,26 +500,7 @@ async def cafe_page(request: Request, q: str = "", cat: str = ""):
 
 @router.get("/shop", response_class=HTMLResponse, include_in_schema=False)
 async def shop_page(request: Request, q: str = "", cat: str = "", tab: str = "new"):
-    db, member, club, user = await page_ctx(request)
-    data = await catalog(db, club["id"])
-    items = data["shop"]
-    all_hit = []
-    if q:
-        ql = q.lower()
-        all_hit = [i for i in data["items"] if ql in i["name"].lower() or ql in i["category"].lower()]
-        items = [i for i in items if ql in i["name"].lower() or ql in i["category"].lower()]
-    if cat:
-        items = [i for i in items if i["category"].lower() == cat.lower()]
-    groups: dict = {}
-    for i in items:
-        groups.setdefault(i["category"], []).append(i)
-    popular = [i for i in data["popular"] if i["kind"] == "shop"][:6]
-    newest = [i for i in data["newArrivals"] if i["kind"] == "shop"][:6]
-    ctx = _common(member, club, user, await _unread(db, club, member, user))
-    ctx.update({"items": items, "groups": groups, "categories": data["shopCategories"], "popular": popular,
-                "newest": newest, "q": q, "cat": cat, "tab": tab, "active_tab": "shop",
-                "search_hits": all_hit})
-    return render(request, "members/shop.html", ctx)
+    return RedirectResponse("/members/cafe", status_code=303)
 
 
 @router.get("/item/{item_id}", response_class=HTMLResponse, include_in_schema=False)
@@ -525,14 +509,18 @@ async def item_page(request: Request, item_id: str):
     item = await db.menu_items.find_one({"id": item_id, "clubId": club["id"], "active": {"$ne": False}})
     if not item:
         raise HTTPException(404, "Item not found")
+    if (item.get("kind") or "").lower() == "shop":
+        return RedirectResponse("/members/cafe", status_code=303)
     sold = await sold_counts(db, club["id"])
     view = public_item(item, sold)
+    if view["kind"] != "cafe":
+        return RedirectResponse("/members/cafe", status_code=303)
     data = await catalog(db, club["id"], include_out_of_stock=False)
-    related = [v for v in data["items"] if v["id"] != item_id and v["category"] == view["category"]][:6]
+    related = [v for v in data["cafe"] if v["id"] != item_id and v["category"] == view["category"]][:6]
     if len(related) < 4:
-        related += [v for v in data["items"] if v["id"] != item_id and v["kind"] == view["kind"] and v not in related][:6 - len(related)]
+        related += [v for v in data["cafe"] if v["id"] != item_id and v not in related][:6 - len(related)]
     ctx = _common(member, club, user)
-    ctx.update({"item": view, "related": related, "scheme": "paper", "active_tab": "cafe" if view["kind"] == "cafe" else "shop",
+    ctx.update({"item": view, "related": related, "scheme": "paper", "active_tab": "cafe",
                 "tables": await live_tables(db, club, member["id"])})
     return render(request, "members/product.html", ctx)
 
@@ -544,8 +532,8 @@ async def cart_page(request: Request):
     frames = await my_frames(db, club, member["id"], limit=100)
     bills = await my_bills(db, club, member["id"], limit=100)
     ctx = _common(member, club, user)
-    ctx.update({"catalog_items": data["items"], "tables": await live_tables(db, club, member["id"]),
-                "dues": due_breakdown(member, frames, bills), "scheme": "paper", "active_tab": "shop",
+    ctx.update({"catalog_items": data["cafe"], "tables": await live_tables(db, club, member["id"]),
+                "dues": due_breakdown(member, frames, bills), "scheme": "paper", "active_tab": "cafe",
                 "cart_badge": False})
     return render(request, "members/cart.html", ctx)
 
@@ -752,11 +740,19 @@ async def item_image(item_id: str, request: Request):
 async def manifest():
     return JSONResponse({
         "name": "Rowdy's Den — Members", "short_name": "Den Members",
-        "description": "Your club in your pocket: live tables, bookings, cafe & pro-shop orders, wallet, frames and events.",
+        "description": "Your club in your pocket: live tables, bookings, cafe orders, wallet, frames and events.",
         "start_url": "/members", "scope": "/members", "display": "standalone", "orientation": "portrait-primary",
-        "background_color": "#bfd1dc", "theme_color": "#bfd1dc",
-        "icons": [{"src": "/members/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-                  {"src": "/members/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-                  {"src": "/members/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
+        "background_color": "#f0e5d6", "theme_color": "#f0e5d6",
+        "icons": [{"src": "/members/static/members/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                  {"src": "/members/static/members/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                  {"src": "/members/static/members/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
         "categories": ["sports", "food", "lifestyle"],
     })
+
+
+@router.get("/sw.js", include_in_schema=False)
+async def members_service_worker():
+    """Serve the worker at the app root so its scope covers all member pages."""
+    path = os.path.join(STATIC_DIR, "members", "sw.js")
+    return FileResponse(path, media_type="application/javascript",
+                        headers={"Service-Worker-Allowed": "/members/", "Cache-Control": "no-cache"})

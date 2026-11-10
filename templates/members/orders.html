@@ -19,10 +19,10 @@
       {% set rows = list if not filt else (list|selectattr('source','equalto',filt)|list if filt != 'unpaid' else list|selectattr('dueAmount','>',0)|list) %}
       {% if rows %}{% set ns.any = True %}
         <div class="month-head">{{ month }}</div>
-        <div class="list">{% for o in rows %}{{ m.order_row(o) }}{% endfor %}</div>
+        <div class="list row-list">{% for o in rows %}{{ m.order_row(o) }}{% endfor %}</div>
       {% endif %}
     {% endfor %}
-    {% if not ns.any %}{{ m.empty('🧾', 'Nothing here yet', 'Cafe and store orders show up here.') }}{% endif %}
+    {% if not ns.any %}{{ m.empty('🧾', 'Nothing here yet', 'Cafe orders show up here.') }}{% endif %}
   </div>
   {% endfor %}
 </div>

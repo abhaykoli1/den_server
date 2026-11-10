@@ -12,9 +12,9 @@
     {% endfor %}
   </div>
   {% endif %}
-  <div class="list mt16">
+  <div class="list row-list mt16">
   {% for r in rows %}
-    <div class="lrow" {% if r.isMe %}style="outline:2px solid var(--ink)"{% endif %}>
+    <div class="lrow {{ 'is-me' if r.isMe }}">
       <span class="b" style="width:22px;text-align:center">{{ r.rank }}</span>
       {{ m.avatar(r.name) }}
       <div class="grow"><div class="t">{{ r.name }}{% if r.isMe %} <span class="badge brand">you</span>{% endif %}</div><div class="s">{{ r.frames }} frames · {{ (r.minutes / 60)|round(1) }} hrs</div></div>

@@ -8,7 +8,7 @@
     <span class="small muted">{{ tables|selectattr('status','equalto','free')|list|length }} free of {{ tables|length }} · open {{ rules.open }} AM – {{ rules.close|hm }}</span>
     <span class="badge live">live</span>
   </div>
-  <div class="list mt16">
+  <div class="list row-list table-list mt16">
   {% for t in tables %}
     <div class="trow {{ 'live' if t.status == 'live' }}" data-table-id="{{ t.id }}" data-status="{{ t.status }}">
       <div class="row between">
