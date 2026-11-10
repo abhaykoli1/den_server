@@ -27,7 +27,10 @@ docs_basic = HTTPBasic()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS or ["*"],
+    allow_origins=[
+        "https://billing.pixelbit.in",
+        "https://app.pixelbit.in",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
